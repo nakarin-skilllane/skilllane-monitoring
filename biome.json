@@ -1,0 +1,119 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.1.3/schema.json",
+  "assist": { "actions": { "source": { "organizeImports": "off" } } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "correctness": {
+        "noUnusedVariables": "off",
+        "noUnusedImports": "error",
+        "noVoidTypeReturn": "off",
+        "useExhaustiveDependencies": "off",
+        "useJsxKeyInIterable": "off",
+        "noSwitchDeclarations": "off",
+        "noChildrenProp": "off"
+      },
+      "complexity": {
+        "noForEach": "off",
+        "noBannedTypes": "off",
+        "noStaticOnlyClass": "off",
+        "useOptionalChain": "off",
+        "noUselessFragments": "off",
+        "noUselessSwitchCase": "off",
+        "noThisInStatic": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noControlCharactersInRegex": "off",
+        "noImplicitAnyLet": "off",
+        "noArrayIndexKey": "off",
+        "noShadowRestrictedNames": "off",
+        "noDuplicateTestHooks": "off",
+        "noConfusingVoidType": "off",
+        "noAssignInExpressions": "off",
+        "noConsole": { "level": "off", "options": { "allow": ["log"] } },
+        "noEmptyInterface": "off",
+        "noPrototypeBuiltins": "off"
+      },
+      "performance": {
+        "noAccumulatingSpread": "off",
+        "noDelete": "off"
+      },
+      "security": {
+        "noGlobalEval": "warn",
+        "noDangerouslySetInnerHtml": "off"
+      },
+      "style": {
+        "useConst": "error",
+        "useImportType": "off",
+        "useLiteralEnumMembers": "off",
+        "useNodejsImportProtocol": "off",
+        "noUnusedTemplateLiteral": "off",
+        "noParameterAssign": "off",
+        "noNonNullAssertion": "off",
+        "noInferrableTypes": "off",
+        "useSelfClosingElements": "off",
+        "noUselessElse": "off",
+        "useNumberNamespace": "off",
+        "noEnum": "off"
+      },
+      "a11y": {
+        "useAltText": "off",
+        "useButtonType": "off",
+        "useMediaCaption": "off",
+        "useGenericFontNames": "off",
+        "useSemanticElements": "off",
+        "useAriaPropsSupportedByRole": "off"
+      },
+      "nursery": {}
+    }
+  },
+  "formatter": {
+    "enabled": true
+  },
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    },
+    "formatter": {
+      "indentStyle": "space",
+      "indentWidth": 2,
+      "quoteStyle": "single",
+      "semicolons": "asNeeded",
+      "trailingCommas": "all"
+    }
+  },
+  "json": {
+    "formatter": {
+      "indentStyle": "space",
+      "indentWidth": 2,
+      "enabled": false
+    }
+  },
+  "css": {
+    "formatter": {
+      "indentStyle": "space",
+      "indentWidth": 2,
+      "quoteStyle": "single"
+    }
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/school-e2e-tests",
+      "!**/dist",
+      "!**/public",
+      "!**/public/js/pdpa/**",
+      "!**/node_modules",
+      "!**/.vscode"
+    ]
+  },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true,
+    "defaultBranch": "main",
+    "root": "."
+  }
+}

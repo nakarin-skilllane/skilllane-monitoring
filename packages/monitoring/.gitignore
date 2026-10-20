@@ -1,0 +1,2 @@
+# Staging output of `pnpm build`; swapped into dist/ when tsc succeeds.
+dist.next

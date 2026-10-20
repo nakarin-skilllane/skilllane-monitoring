@@ -1,0 +1,21 @@
+{
+  "name": "@skilllane/monitoring-contract",
+  "version": "0.1.0",
+  "description": "Wire format between @skilllane/monitoring (publisher) and the skilllane-monitoring engine (subscriber)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
