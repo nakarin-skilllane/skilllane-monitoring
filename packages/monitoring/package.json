@@ -1,6 +1,6 @@
 {
   "name": "skilllane-monitoring",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Structured ECS logging and OpenTelemetry traces for NestJS services, published to the customer queue (Kafka, RabbitMQ or BullMQ) or OTLP",
   "license": "ISC",
   "author": "Nakarin Maneekhat",
@@ -41,6 +41,11 @@
       "types": "./dist/otel/index.d.ts",
       "require": "./dist/otel/index.js",
       "default": "./dist/otel/index.js"
+    },
+    "./contract": {
+      "types": "./dist/contract/index.d.ts",
+      "require": "./dist/contract/index.js",
+      "default": "./dist/contract/index.js"
     }
   },
   "typesVersions": {
@@ -53,6 +58,9 @@
       ],
       "otel": [
         "./dist/otel/index.d.ts"
+      ],
+      "contract": [
+        "./dist/contract/index.d.ts"
       ]
     }
   },
@@ -67,7 +75,6 @@
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
-    "skilllane-monitoring-contract": "workspace:*",
     "@opentelemetry/api-logs": "0.222.0",
     "@opentelemetry/auto-instrumentations-node": "0.80.0",
     "@opentelemetry/core": "2.11.0",

@@ -150,11 +150,11 @@ posts to the engine.
 
 The SDK only publishes; the customer runs the queue and the skilllane-monitoring engine
 subscribes (both read the same `.env`, and the rule above is
-`resolveExportMode()` of `skilllane-monitoring-contract`). A queue mode whose connection
+`resolveExportMode()` of `skilllane-monitoring/contract`). A queue mode whose connection
 variable is empty writes one warning and stays on stdout. Queue modes add no
 OTLP exporters.
 
-**Wire format** (`skilllane-monitoring-contract`): one message = one JSON envelope
+**Wire format** (`skilllane-monitoring/contract`): one message = one JSON envelope
 `{ v: 1, stream: 'logs' | 'spans', resource, sentAt, items }`. `resource` is
 `service.name` (without the role), `service.version`,
 `deployment.environment.name`, `host.name`, `app.role`, `telemetry.sdk.*`.
@@ -253,7 +253,7 @@ into one shared buffer, so at most about `LOG_BODY_MAX_BYTES` is held per body.
 **Masking** (always on, also for attributes the app or another
 instrumentation writes, also with `LOG_CAPTURE=off`; `CaptureSpanProcessor`
 applies it before any exporter sees the span). The rules live in
-`skilllane-monitoring-contract` (`packages/monitoring-contract/src/mask`), the same code the skilllane-monitoring
+`skilllane-monitoring/contract` (`src/contract/mask`), the same code the skilllane-monitoring
 engine uses for other senders (SPEC.md §3 in the engine repository):
 
 - key rule (`isSensitiveKey`): an object key, form / query / bind parameter
@@ -479,3 +479,22 @@ pnpm --filter skilllane-monitoring build   # school-core-api imports dist/
 ```
 
 Error hints live in `src/errors/patterns/` — see its README before adding one.
+
+## The contract: `skilllane-monitoring/contract`
+
+The wire format between the SDK (publisher, inside the app) and the skilllane-monitoring engine
+(subscriber) lives in `src/contract` and is exposed as its own entry point, free of side effects
+(no OpenTelemetry, no hooks), so the engine and other readers import only this:
+
+```ts
+import { parseEnvelope, resolveExportMode, INGEST_PATH, maskObject } from 'skilllane-monitoring/contract'
+```
+
+- stream names and queue / topic defaults (`STREAMS`, `topicName()`, `rabbitmqExchange()`)
+- message headers (`HEADER_STREAM`, `HEADER_VERSION`) and the HTTP ingest path (`INGEST_PATH`)
+- the envelope types and `parseEnvelope()`
+- the `LOG_*` environment variable names and `resolveExportMode()`
+- the masking rules both ends apply (`mask/`)
+
+Up to 0.1.0 this was the separate package `skilllane-monitoring-contract`; it is now deprecated in
+favour of this entry point.

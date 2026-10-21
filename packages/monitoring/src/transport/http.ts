@@ -7,7 +7,7 @@ import {
   CONTRACT_VERSION,
   INGEST_PATH,
   type TelemetryStream,
-} from 'skilllane-monitoring-contract'
+} from '../contract'
 import { env } from '../otel/identity'
 import {
   type OutgoingMessage,

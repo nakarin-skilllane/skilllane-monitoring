@@ -4,7 +4,7 @@ import {
   EXPORT_MODES,
   type ExportMode,
   resolveExportMode,
-} from 'skilllane-monitoring-contract'
+} from '../contract'
 import { envNumber } from './identity'
 
 export { EXPORT_MODES, type ExportMode }

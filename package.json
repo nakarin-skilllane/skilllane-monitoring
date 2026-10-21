@@ -4,7 +4,7 @@
   "description": "SkillLane Monitoring: the SDK and wire contract services install to send logs and traces to a skilllane-monitoring engine",
   "packageManager": "pnpm@8.14.0",
   "scripts": {
-    "build": "pnpm -r --filter ./packages/monitoring-contract --filter ./packages/monitoring build",
+    "build": "pnpm -r --filter ./packages/monitoring build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check --no-errors-on-unmatched --diagnostic-level=error",

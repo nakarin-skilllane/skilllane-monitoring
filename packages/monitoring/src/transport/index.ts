@@ -8,7 +8,7 @@ import {
   type EnvelopeTransport,
   type ResourceInfo,
   topicName,
-} from 'skilllane-monitoring-contract'
+} from '../contract'
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base'
 import type { RecordSink } from '../logger/sink'
 import { env, type ServiceIdentity } from '../otel/identity'

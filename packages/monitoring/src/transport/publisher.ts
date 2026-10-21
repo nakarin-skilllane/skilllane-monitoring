@@ -1,7 +1,4 @@
-import {
-  CONTRACT_VERSION,
-  type TelemetryStream,
-} from 'skilllane-monitoring-contract'
+import { CONTRACT_VERSION, type TelemetryStream } from '../contract'
 import { context, ROOT_CONTEXT } from '@opentelemetry/api'
 import { suppressTracing } from '@opentelemetry/core'
 import { getLogger } from '../logger'

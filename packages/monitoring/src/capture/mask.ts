@@ -1,4 +1,4 @@
-import { maskObject, redactValue } from 'skilllane-monitoring-contract'
+import { maskObject, redactValue } from '../contract'
 
 /**
  * The masking of everything the capture stores. The rules live in
@@ -34,7 +34,7 @@ export {
   SENSITIVE_KEYS,
   SENSITIVE_WORDS,
   truncateUtf8,
-} from 'skilllane-monitoring-contract'
+} from '../contract'
 
 /** Value-based masking of one string. */
 export function maskText(text: string): string {

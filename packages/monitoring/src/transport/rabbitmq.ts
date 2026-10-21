@@ -7,7 +7,7 @@ import {
   STREAMS,
   type TelemetryStream,
   topicName,
-} from 'skilllane-monitoring-contract'
+} from '../contract'
 import type { ChannelModel, ConfirmChannel } from 'amqplib'
 import { parseAddress } from '../integrations/dependency-monitor'
 import { env } from '../otel/identity'

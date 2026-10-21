@@ -1,9 +1,4 @@
-import {
-  ENV,
-  STREAMS,
-  type TelemetryStream,
-  topicName,
-} from 'skilllane-monitoring-contract'
+import { ENV, STREAMS, type TelemetryStream, topicName } from '../contract'
 import type { Queue } from 'bullmq'
 import type Redis from 'ioredis'
 import { parseAddress } from '../integrations/dependency-monitor'

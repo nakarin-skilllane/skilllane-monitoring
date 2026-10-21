@@ -7,7 +7,7 @@ import {
   redactText,
   redactValue,
   stripQuery,
-} from 'skilllane-monitoring-contract'
+} from '../contract'
 import { ALLOWED_FIELDS, MAX_LABELS } from '../types'
 
 // The rules themselves are shared with the engine and the demo seed (skilllane-monitoring-contract, SPEC.md §3).
@@ -17,7 +17,7 @@ export {
   redactText,
   redactValue,
   stripQuery,
-} from 'skilllane-monitoring-contract'
+} from '../contract'
 
 /** Free text: the value rule, and query strings removed. */
 const TEXT_FIELDS = [

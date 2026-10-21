@@ -12,7 +12,7 @@ import {
   REDACTED,
   redactValue,
   truncateUtf8,
-} from 'skilllane-monitoring-contract'
+} from '../contract'
 import type { Attributes, AttributeValue } from '@opentelemetry/api'
 import { CAPTURE_ATTR } from './attributes'
 import { type DbParameter, foreignParams, paramList, paramsJson } from './db'

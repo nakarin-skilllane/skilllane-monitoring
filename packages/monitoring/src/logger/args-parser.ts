@@ -1,4 +1,4 @@
-import { isSensitiveKey, REDACTED } from 'skilllane-monitoring-contract'
+import { isSensitiveKey, REDACTED } from '../contract'
 import { isErrorLike } from '../errors/error-serializer'
 import type { LogOptions } from '../types'
 

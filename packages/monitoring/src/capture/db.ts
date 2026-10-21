@@ -3,7 +3,7 @@ import {
   type DbParamType,
   dbParametersJson,
   sqlPlaceholders,
-} from 'skilllane-monitoring-contract'
+} from '../contract'
 import type { Span } from '@opentelemetry/api'
 import { CAPTURE_ATTR } from './attributes'
 import { maskValue } from './mask'

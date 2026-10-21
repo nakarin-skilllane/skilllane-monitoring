@@ -16,7 +16,7 @@ import {
   type IMetricReader,
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics'
-import { isEnvelopeTransport } from 'skilllane-monitoring-contract'
+import { isEnvelopeTransport } from '../contract'
 import { NodeSDK, type NodeSDKConfiguration } from '@opentelemetry/sdk-node'
 import {
   BatchSpanProcessor,

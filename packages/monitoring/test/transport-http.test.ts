@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'http'
 import type { AddressInfo } from 'net'
 import { gunzipSync } from 'zlib'
-import { resolveExportMode } from 'skilllane-monitoring-contract'
+import { resolveExportMode } from '../src/contract'
 import {
   afterAll,
   afterEach,

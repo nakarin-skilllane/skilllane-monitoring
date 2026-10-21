@@ -1,4 +1,4 @@
-import { redisCommand } from 'skilllane-monitoring-contract'
+import { redisCommand } from '../contract'
 import { captureSettings } from './settings'
 
 /**
