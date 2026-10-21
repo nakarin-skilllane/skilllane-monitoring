@@ -84,7 +84,7 @@ describe('AppLogger through the Nest Logger', () => {
       reason: 'token_expired',
     })
     logger.log('x', { event: 'made.up' }, 'Auth')
-    expect(lines.some((l) => l['log.logger'] === '@skilllane/monitoring')).toBe(
+    expect(lines.some((l) => l['log.logger'] === 'skilllane-monitoring')).toBe(
       true,
     )
     expect(lastLine(lines)['event.code']).toBe('app.log')

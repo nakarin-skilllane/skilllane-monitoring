@@ -28,7 +28,9 @@ export const aggregateAdapter: ErrorAdapter = {
 export const ioredisAdapter: ErrorAdapter = {
   name: 'ioredis',
   match: (error) =>
-    error?.name === 'ReplyError' || error?.name === 'MaxRetriesPerRequestError',
+    error?.name === 'ReplyError' ||
+    error?.name === 'MaxRetriesPerRequestError' ||
+    error?.name === 'ClusterAllFailedError',
   extract: (error) => ({
     code:
       error.name === 'ReplyError'
@@ -87,6 +89,34 @@ export const axiosAdapter: ErrorAdapter = {
   }),
 }
 
+/**
+ * Global fetch (undici) rejects with `TypeError: fetch failed` and puts the
+ * real reason in `cause` (ECONNREFUSED, UND_ERR_CONNECT_TIMEOUT, a TLS code).
+ * node-fetch's FetchError carries the system code itself.
+ */
+export const fetchAdapter: ErrorAdapter = {
+  name: 'fetch',
+  match: (error) =>
+    (error?.name === 'TypeError' &&
+      error?.message === 'fetch failed' &&
+      error?.cause !== undefined) ||
+    error?.name === 'FetchError',
+  extract: (error) => {
+    const cause = error.cause
+    const code =
+      typeof cause?.code === 'string'
+        ? cause.code
+        : typeof error.code === 'string'
+          ? error.code
+          : typeof cause?.name === 'string' && cause.name !== 'Error'
+            ? cause.name
+            : error.name === 'FetchError'
+              ? 'FetchError'
+              : undefined
+    return { code, cause, dependency: 'http' }
+  },
+}
+
 export const awsAdapter: ErrorAdapter = {
   name: 'aws-sdk',
   match: (error) =>
@@ -98,12 +128,16 @@ export const awsAdapter: ErrorAdapter = {
   }),
 }
 
+// amqplib puts the AMQP reply code (320, 404, 406…) in `code` and says in the
+// message whether the channel, the connection or the handshake ended.
 export const amqpAdapter: ErrorAdapter = {
   name: 'amqplib',
   match: (error) =>
     typeof error?.code === 'number' &&
     typeof error?.message === 'string' &&
-    /(Channel|Connection) closed/.test(error.message),
+    /(Channel|Connection) closed|^Operation failed:|^Handshake terminated by server:/.test(
+      error.message,
+    ),
   extract: (error) => ({ code: `AMQP_${error.code}`, dependency: 'rabbitmq' }),
 }
 
@@ -111,10 +145,14 @@ const SMTP_CODES = new Set([
   'EAUTH',
   'ECONNECTION',
   'EENVELOPE',
+  'EENVELOPEFORMAT',
   'EMESSAGE',
   'ESOCKET',
   'EDNS',
   'EPROTOCOL',
+  'ETLS',
+  'ESTREAM',
+  'ECOMPOSE',
 ])
 
 export const nodemailerAdapter: ErrorAdapter = {
@@ -156,6 +194,34 @@ export const ldapAdapter: ErrorAdapter = {
   name: 'ldapts',
   match: (error) => LDAP_ERRORS.has(error?.name),
   extract: (error) => ({ code: error.name }),
+}
+
+// MongoServerError carries a numeric code (11000 = duplicate key); the other
+// driver errors are told apart by class name (MongoNetworkError, …).
+export const mongoAdapter: ErrorAdapter = {
+  name: 'mongodb',
+  match: (error) =>
+    typeof error?.name === 'string' && /^Mongo(?:db|DB)?[A-Z]/.test(error.name),
+  extract: (error) => ({
+    code:
+      typeof error.code === 'number'
+        ? `MONGO_${error.code}`
+        : typeof error.codeName === 'string'
+          ? error.codeName
+          : error.name,
+    cause: error.cause,
+  }),
+}
+
+// body-parser / raw-body errors: `type` is the stable id ('entity.too.large'),
+// `status` the HTTP answer. The name (PayloadTooLargeError) is less specific.
+export const bodyParserAdapter: ErrorAdapter = {
+  name: 'body-parser',
+  match: (error) =>
+    typeof error?.type === 'string' &&
+    /^[a-z]+\.[a-z.]+$/.test(error.type) &&
+    typeof error?.status === 'number',
+  extract: (error) => ({ code: error.type, status: error.status }),
 }
 
 export const nestAdapter: ErrorAdapter = {

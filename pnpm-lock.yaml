@@ -53,15 +53,15 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: 1.43.0
         version: 1.43.0
-      '@skilllane/monitoring-contract':
-        specifier: workspace:*
-        version: link:../monitoring-contract
       pino:
         specifier: ^9.7.0
         version: 9.14.0
       require-in-the-middle:
         specifier: 8.0.1
         version: 8.0.1
+      skilllane-monitoring-contract:
+        specifier: workspace:*
+        version: link:../monitoring-contract
     devDependencies:
       '@nestjs/common':
         specifier: ^11.1.0

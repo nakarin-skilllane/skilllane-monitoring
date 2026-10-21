@@ -20,7 +20,7 @@ export function logAppStarted(port?: number): void {
   logged = true
   getLogger().event({
     event: 'app.started',
-    logger: '@skilllane/monitoring',
+    logger: 'skilllane-monitoring',
     fields: {
       'server.port': port,
       duration_ms: Math.round(process.uptime() * 1000),

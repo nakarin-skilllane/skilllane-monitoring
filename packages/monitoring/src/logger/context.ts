@@ -39,7 +39,7 @@ const storage = new AsyncLocalStorage<LogScope>()
  * symbol key: the pretty format shows it, JSON.stringify and pino skip it,
  * so the JSON output is unchanged.
  */
-export const ELAPSED_MS = Symbol.for('@skilllane/monitoring.elapsed_ms')
+export const ELAPSED_MS = Symbol.for('skilllane-monitoring.elapsed_ms')
 
 export function runInScope<T>(scope: LogScope, fn: () => T): T {
   return storage.run(scope, fn)

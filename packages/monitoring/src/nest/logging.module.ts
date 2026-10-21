@@ -142,7 +142,7 @@ function initialize(options: LoggingModuleOptions): true {
     logger.event({
       event: 'app.log',
       level: 'warn',
-      logger: '@skilllane/monitoring',
+      logger: 'skilllane-monitoring',
       message: 'Logging integration failed to attach',
       error,
     })
@@ -159,7 +159,7 @@ class LoggingLifecycle
     if (!isOtelStarted()) {
       logger.event({
         event: 'otel.not_started',
-        logger: '@skilllane/monitoring',
+        logger: 'skilllane-monitoring',
       })
     }
     // An HTTP app logs it after listen(), with the port.
@@ -219,7 +219,7 @@ export class LoggingModule {
 }
 
 /**
- * What `NODE_OPTIONS=--require @skilllane/monitoring/register` adds to the root
+ * What `NODE_OPTIONS=--require skilllane-monitoring/register` adds to the root
  * module. The app's TypeORM DataSource, when it has one, names DB objects in
  * errors.
  */

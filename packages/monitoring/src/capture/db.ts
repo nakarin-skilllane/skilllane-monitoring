@@ -3,7 +3,7 @@ import {
   type DbParamType,
   dbParametersJson,
   sqlPlaceholders,
-} from '@skilllane/monitoring-contract'
+} from 'skilllane-monitoring-contract'
 import type { Span } from '@opentelemetry/api'
 import { CAPTURE_ATTR } from './attributes'
 import { maskValue } from './mask'
@@ -15,7 +15,7 @@ import { captureActive, captureSettings } from './settings'
  * { key, type, value }). key: the bind name, or "1", "2" … for positional
  * binds; value: the string form (dates ISO-8601, buffers hex, objects JSON).
  * Each bind is matched to its column where the statement says (shared rules,
- * @skilllane/monitoring-contract src/mask/sql.ts: `col = :2`, `col IN (…)`, `INSERT … (cols)
+ * skilllane-monitoring-contract src/mask/sql.ts: `col = :2`, `col IN (…)`, `INSERT … (cols)
  * VALUES / SELECT`, a call around the value, `AS alias` …), so `"PASSWORD_HASH"
  * = :2` is masked by its column like a named `:password` is by its name; in a
  * statement that names a secret, a bind of unknown column is masked too. Then

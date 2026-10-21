@@ -1,7 +1,21 @@
 {
-  "name": "@skilllane/monitoring",
+  "name": "skilllane-monitoring",
   "version": "0.1.0",
   "description": "Structured ECS logging and OpenTelemetry traces for NestJS services, published to the customer queue (Kafka, RabbitMQ or BullMQ) or OTLP",
+  "license": "ISC",
+  "author": "Nakarin Maneekhat",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nakarin-skilllane/skilllane-monitoring.git",
+    "directory": "packages/monitoring"
+  },
+  "homepage": "https://github.com/nakarin-skilllane/skilllane-monitoring/tree/main/packages/monitoring#readme",
+  "bugs": {
+    "url": "https://github.com/nakarin-skilllane/skilllane-monitoring/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
@@ -49,11 +63,11 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist dist.next",
     "lint": "biome check --no-errors-on-unmatched --diagnostic-level=error",
-    "lint:fix": "biome check --write --no-errors-on-unmatched --diagnostic-level=error"
+    "lint:fix": "biome check --write --no-errors-on-unmatched --diagnostic-level=error",
+    "prepublishOnly": "pnpm run build"
   },
-  "license": "ISC",
   "dependencies": {
-    "@skilllane/monitoring-contract": "workspace:*",
+    "skilllane-monitoring-contract": "workspace:*",
     "@opentelemetry/api-logs": "0.222.0",
     "@opentelemetry/auto-instrumentations-node": "0.80.0",
     "@opentelemetry/core": "2.11.0",

@@ -1,4 +1,4 @@
-const BOOT_LOGGED = Symbol.for('@skilllane/monitoring.boot-logged')
+const BOOT_LOGGED = Symbol.for('skilllane-monitoring.boot-logged')
 
 /** True when this error's app.boot_failed line is already written. */
 export function isBootFailureLogged(error: unknown): boolean {

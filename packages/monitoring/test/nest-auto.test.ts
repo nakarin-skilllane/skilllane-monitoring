@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest'
 import { hookNestFactory } from '../src/nest/nest-auto'
 import { captureLogger } from './helpers'
 
-// Hook first, then load Nest: what `--require @skilllane/monitoring/register` does.
+// Hook first, then load Nest: what `--require skilllane-monitoring/register` does.
 hookNestFactory()
 const load = createRequire(__filename)
 require('reflect-metadata')
@@ -61,7 +61,7 @@ describe('automatic Nest wiring', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
 
     const codes = lines.map((l) => `${l['event.code']}:${l['log.logger']}`)
-    const started = codes.indexOf('app.started:@skilllane/monitoring')
+    const started = codes.indexOf('app.started:skilllane-monitoring')
     expect(started).toBeGreaterThan(codes.indexOf('app.log:NestFactory'))
     expect(lines[started]['server.port']).toBe(port)
     expect(lines.filter((l) => l.message === 'Greeting')).toHaveLength(1)

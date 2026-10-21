@@ -16,7 +16,7 @@ import {
   type IMetricReader,
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics'
-import { isEnvelopeTransport } from '@skilllane/monitoring-contract'
+import { isEnvelopeTransport } from 'skilllane-monitoring-contract'
 import { NodeSDK, type NodeSDKConfiguration } from '@opentelemetry/sdk-node'
 import {
   BatchSpanProcessor,
@@ -254,7 +254,7 @@ function queueExport(
     getLogger().event({
       event: 'app.log',
       level: 'warn',
-      logger: '@skilllane/monitoring',
+      logger: 'skilllane-monitoring',
       message: `LOG_EXPORT=${mode} needs ${missing}; logs and traces stay on stdout`,
       fields: { reason: `${missing} is empty` },
     })
@@ -277,7 +277,7 @@ function warnIgnored(option: string): void {
   getLogger().event({
     event: 'app.log',
     level: 'warn',
-    logger: '@skilllane/monitoring',
+    logger: 'skilllane-monitoring',
     message: 'Telemetry is already started; this option is ignored',
     fields: { reason: option },
   })
@@ -285,7 +285,7 @@ function warnIgnored(option: string): void {
 
 /**
  * A later call, e.g. the app's instrumentation file after
- * NODE_OPTIONS=--require @skilllane/monitoring/register: its instrumentation
+ * NODE_OPTIONS=--require skilllane-monitoring/register: its instrumentation
  * overrides and extra instrumentations still apply. What the SDK fixes at
  * start (service identity, span processors) cannot change.
  */
@@ -326,7 +326,7 @@ function applyLaterOptions(options: TelemetryOptions): void {
 /**
  * Starts OpenTelemetry (traces, metrics, logs) and the process handlers.
  * Must run before the app imports http / express / ioredis / kafkajs, so it
- * belongs on the first line of main.ts — `import '@skilllane/monitoring/register'`,
+ * belongs on the first line of main.ts — `import 'skilllane-monitoring/register'`,
  * or `registerTelemetry({...})` in the app's own instrumentation file when
  * it needs options. A later call applies its instrumentation options and
  * returns the first result.
@@ -404,7 +404,7 @@ export function registerTelemetry(options: TelemetryOptions = {}): Telemetry {
     getLogger().event({
       event: 'app.log',
       level: 'warn',
-      logger: '@skilllane/monitoring',
+      logger: 'skilllane-monitoring',
       message: queue
         ? 'OpenTelemetry failed to start; logs still go to the queue, no traces'
         : 'OpenTelemetry failed to start; logs stay on stdout',
@@ -434,7 +434,7 @@ export function registerTelemetry(options: TelemetryOptions = {}): Telemetry {
     // The logs publisher gets the same redacted record stdout gets.
     setRecordSink(queue.logSink)
   } else if (started && pipeline.logRecordProcessors.length && !legacy) {
-    setRecordSink(createLogBridge(logs.getLogger('@skilllane/monitoring')))
+    setRecordSink(createLogBridge(logs.getLogger('skilllane-monitoring')))
   }
   if (queue) {
     // A script that simply ends: its sockets are unreferenced, so the loop
@@ -448,7 +448,7 @@ export function registerTelemetry(options: TelemetryOptions = {}): Telemetry {
     getLogger().event({
       event: 'app.log',
       level: 'warn',
-      logger: '@skilllane/monitoring',
+      logger: 'skilllane-monitoring',
       message: 'Unknown LOG_EXPORT value; destination chosen from config',
       fields: { reason: `LOG_EXPORT=${selection.invalid} → ${selection.mode}` },
     })

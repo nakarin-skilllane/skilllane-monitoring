@@ -10,7 +10,7 @@ import {
 import { hookKafkajsLogs, trackRun } from '../src/otel/kafkajs-hook'
 import { captureLogger, type Line } from './helpers'
 
-// Hook first, then load the clients: what `--require @skilllane/monitoring/register` does.
+// Hook first, then load the clients: what `--require skilllane-monitoring/register` does.
 hookAutoWatch()
 hookKafkajsLogs({ watch: true })
 const load = createRequire(__filename)

@@ -4,7 +4,7 @@ import {
   EXPORT_MODES,
   type ExportMode,
   resolveExportMode,
-} from '@skilllane/monitoring-contract'
+} from 'skilllane-monitoring-contract'
 import { envNumber } from './identity'
 
 export { EXPORT_MODES, type ExportMode }
@@ -19,7 +19,7 @@ export interface ExportSelection {
  * LOG_EXPORT wins when set (kafka · rabbitmq · bullmq · otlp · stdout).
  * Otherwise the first configured of Kafka brokers, RabbitMQ URL, BullMQ
  * Redis URL, collector endpoint; else stdout. stdout is always written.
- * Same rule as the engine (@skilllane/monitoring-contract).
+ * Same rule as the engine (skilllane-monitoring-contract).
  */
 export function selectExportMode(): ExportSelection {
   return resolveExportMode(process.env)

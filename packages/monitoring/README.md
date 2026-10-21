@@ -1,4 +1,4 @@
-# @skilllane/monitoring
+# skilllane-monitoring
 
 One log format for every NestJS service: one ECS JSON object per line on
 stdout, an `event.code` on every line, an English hint for known errors, and a
@@ -14,8 +14,8 @@ Collector. See [Queue export](#queue-export-kafka--rabbitmq--bullmq).
 Add the dependency and load the register entry before anything else:
 
 ```sh
-pnpm add @skilllane/monitoring
-NODE_OPTIONS="--require @skilllane/monitoring/register" node dist/main.js
+pnpm add skilllane-monitoring
+NODE_OPTIONS="--require skilllane-monitoring/register" node dist/main.js
 ```
 
 or, when the service already has an instrumentation file loaded first by
@@ -150,11 +150,11 @@ posts to the engine.
 
 The SDK only publishes; the customer runs the queue and the skilllane-monitoring engine
 subscribes (both read the same `.env`, and the rule above is
-`resolveExportMode()` of `@skilllane/monitoring-contract`). A queue mode whose connection
+`resolveExportMode()` of `skilllane-monitoring-contract`). A queue mode whose connection
 variable is empty writes one warning and stays on stdout. Queue modes add no
 OTLP exporters.
 
-**Wire format** (`@skilllane/monitoring-contract`): one message = one JSON envelope
+**Wire format** (`skilllane-monitoring-contract`): one message = one JSON envelope
 `{ v: 1, stream: 'logs' | 'spans', resource, sentAt, items }`. `resource` is
 `service.name` (without the role), `service.version`,
 `deployment.environment.name`, `host.name`, `app.role`, `telemetry.sdk.*`.
@@ -197,14 +197,14 @@ in a queue, and a restart of the app loses them.
   do not retry in step). The connection is reopened on the next
   send (no client-side reconnect loops). Delivery is at-least-once.
 - State changes are written once each, as `app.log` lines of logger
-  `@skilllane/monitoring`: `Telemetry export connected`, `… is failing` (warn, with
+  `skilllane-monitoring`: `Telemetry export connected`, `… is failing` (warn, with
   the error), `… recovered` (with `duration_ms`), `… is dropping <stream>
   items` (warn) and `… dropped N <stream> items` (info).
 - Shutdown (SIGTERM / `app.close()`), a crash, a boot failure and a script
   that simply ends (`beforeExit`) flush and close within
   `LOG_EXPORT_SHUTDOWN_MS`; what is still unsent then is named in a warning on
   stdout. An app that calls `process.exit()` itself should
-  `await shutdownTelemetry()` (`@skilllane/monitoring/otel`) first.
+  `await shutdownTelemetry()` (`skilllane-monitoring/otel`) first.
 
 **No feedback loops.** Every publish runs under
 `suppressTracing(ROOT_CONTEXT)`, so the instrumented kafkajs / amqplib /
@@ -253,7 +253,7 @@ into one shared buffer, so at most about `LOG_BODY_MAX_BYTES` is held per body.
 **Masking** (always on, also for attributes the app or another
 instrumentation writes, also with `LOG_CAPTURE=off`; `CaptureSpanProcessor`
 applies it before any exporter sees the span). The rules live in
-`@skilllane/monitoring-contract` (`packages/monitoring-contract/src/mask`), the same code the skilllane-monitoring
+`skilllane-monitoring-contract` (`packages/monitoring-contract/src/mask`), the same code the skilllane-monitoring
 engine uses for other senders (SPEC.md §3 in the engine repository):
 
 - key rule (`isSensitiveKey`): an object key, form / query / bind parameter
@@ -341,8 +341,8 @@ or the app's own span processors).
 Code that makes its own spans uses the same rules: `captureHttp(span, { url,
 request: { headers, body }, response: { headers, body } })`,
 `captureMessage(span, { body, headers })`, `captureDbParameters(span,
-statement, binds)` (`@skilllane/monitoring`); `instrumentationConfigOf(name)`
-(`@skilllane/monitoring/otel`) gives an instrumentation's running options, e.g. for a
+statement, binds)` (`skilllane-monitoring`); `instrumentationConfigOf(name)`
+(`skilllane-monitoring/otel`) gives an instrumentation's running options, e.g. for a
 stand-in driver.
 
 Not captured: a TypeORM `query(sql, params)` (the instrumentation records no
@@ -474,8 +474,8 @@ Dashboards and alerts that query the old fields must move to the new ones.
 ## Development
 
 ```sh
-pnpm --filter @skilllane/monitoring test
-pnpm --filter @skilllane/monitoring build   # school-core-api imports dist/
+pnpm --filter skilllane-monitoring test
+pnpm --filter skilllane-monitoring build   # school-core-api imports dist/
 ```
 
 Error hints live in `src/errors/patterns/` — see its README before adding one.

@@ -1,7 +1,7 @@
 import type {
   EnvelopeTransport,
   TelemetryStream,
-} from '@skilllane/monitoring-contract'
+} from 'skilllane-monitoring-contract'
 
 /** One queue message: one encoded Envelope. */
 export interface OutgoingMessage {

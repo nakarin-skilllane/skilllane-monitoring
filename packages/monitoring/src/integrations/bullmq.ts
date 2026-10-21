@@ -80,7 +80,7 @@ function jobHeaders(job: {
   }
 }
 
-const tracer = trace.getTracer('@skilllane/monitoring')
+const tracer = trace.getTracer('skilllane-monitoring')
 
 /**
  * Queue.add / addBulk as a PRODUCER span `<queue> publish` (BullMQ has no

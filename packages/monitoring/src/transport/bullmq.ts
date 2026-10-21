@@ -3,7 +3,7 @@ import {
   STREAMS,
   type TelemetryStream,
   topicName,
-} from '@skilllane/monitoring-contract'
+} from 'skilllane-monitoring-contract'
 import type { Queue } from 'bullmq'
 import type Redis from 'ioredis'
 import { parseAddress } from '../integrations/dependency-monitor'

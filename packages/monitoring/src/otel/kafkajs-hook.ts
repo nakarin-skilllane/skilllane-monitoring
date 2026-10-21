@@ -9,8 +9,8 @@ import {
   watchKafkaProducer,
 } from '../integrations/kafka'
 
-const PATCHED = Symbol.for('@skilllane/monitoring.kafkajs-patched')
-const BROKERS = Symbol('@skilllane/monitoring.kafkajs-brokers')
+const PATCHED = Symbol.for('skilllane-monitoring.kafkajs-patched')
+const BROKERS = Symbol('skilllane-monitoring.kafkajs-brokers')
 
 let hook: Hook | undefined
 

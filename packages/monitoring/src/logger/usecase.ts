@@ -7,7 +7,7 @@ import { AsyncLocalStorage } from 'async_hooks'
  */
 const storage = new AsyncLocalStorage<string>()
 
-const USECASE = Symbol.for('@skilllane/monitoring.usecase')
+const USECASE = Symbol.for('skilllane-monitoring.usecase')
 
 export function currentUsecase(): string | undefined {
   return storage.getStore()
@@ -54,7 +54,7 @@ export interface CqrsClasses {
   CommandBus?: { prototype: { execute: (...args: any[]) => any } }
 }
 
-const PATCHED = Symbol.for('@skilllane/monitoring.cqrs-patched')
+const PATCHED = Symbol.for('skilllane-monitoring.cqrs-patched')
 
 /**
  * Wraps `execute` of the app's buses once, so every query/command runs as a

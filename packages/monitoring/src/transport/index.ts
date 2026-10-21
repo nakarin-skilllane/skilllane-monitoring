@@ -8,7 +8,7 @@ import {
   type EnvelopeTransport,
   type ResourceInfo,
   topicName,
-} from '@skilllane/monitoring-contract'
+} from 'skilllane-monitoring-contract'
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base'
 import type { RecordSink } from '../logger/sink'
 import { env, type ServiceIdentity } from '../otel/identity'
@@ -60,7 +60,7 @@ export function envelopeResource(identity: ServiceIdentity): ResourceInfo {
     'deployment.environment.name': identity.environment,
     'host.name': env('HOSTNAME') ?? hostname(),
     'app.role': identity.role,
-    'telemetry.sdk.name': '@skilllane/monitoring',
+    'telemetry.sdk.name': 'skilllane-monitoring',
     'telemetry.sdk.version': sdkVersion(),
     // Items are masked with these rules before they leave the app: the engine trusts them.
     [MASK_RESOURCE_KEY]: String(MASK_VERSION),

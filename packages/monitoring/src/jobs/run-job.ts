@@ -43,7 +43,7 @@ export interface JobMeta {
   isFinal?: (error: unknown) => boolean
 }
 
-const tracer = trace.getTracer('@skilllane/monitoring')
+const tracer = trace.getTracer('skilllane-monitoring')
 
 function parentContext(carrier: Record<string, unknown> | undefined): Context {
   if (trace.getActiveSpan()) return context.active()

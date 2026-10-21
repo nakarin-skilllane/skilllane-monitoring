@@ -5,7 +5,7 @@ import {
   HEADER_VERSION,
   type TelemetryStream,
   topicName,
-} from '@skilllane/monitoring-contract'
+} from 'skilllane-monitoring-contract'
 import type { Producer, SASLOptions } from 'kafkajs'
 import { env } from '../otel/identity'
 import { KAFKAJS_UNPATCHED, markInternal } from './internal'

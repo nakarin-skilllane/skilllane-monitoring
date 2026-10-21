@@ -175,41 +175,56 @@ describe('kafkajs logCreator hook', () => {
 })
 
 describe('instrumentationConfig', () => {
-  it('turns off socket, router and pino noise and keeps app overrides', async () => {
-    const { instrumentationConfig } = await import('../src/otel/register')
-    const appIgnore = vi.fn((req: { url?: string }) => req.url === '/internal')
-    const config: Record<string, any> = instrumentationConfig({
-      instrumentationConfig: {
-        '@opentelemetry/instrumentation-http': {
-          ignoreIncomingRequestHook: appIgnore as any,
+  // Imports the whole register module graph (auto-instrumentations + the
+  // error pattern table); that transform is slow when vitest runs files in parallel.
+  it(
+    'turns off socket, router and pino noise and keeps app overrides',
+    { timeout: 20_000 },
+    async () => {
+      const { instrumentationConfig } = await import('../src/otel/register')
+      const appIgnore = vi.fn(
+        (req: { url?: string }) => req.url === '/internal',
+      )
+      const config: Record<string, any> = instrumentationConfig({
+        instrumentationConfig: {
+          '@opentelemetry/instrumentation-http': {
+            ignoreIncomingRequestHook: appIgnore as any,
+          },
+          '@opentelemetry/instrumentation-oracledb': {
+            enhancedDatabaseReporting: true,
+          },
         },
-        '@opentelemetry/instrumentation-oracledb': {
-          enhancedDatabaseReporting: true,
-        },
-      },
-    })
-    for (const name of ['net', 'dns', 'fs', 'router', 'pino', 'nestjs-core']) {
-      expect(config[`@opentelemetry/instrumentation-${name}`]).toEqual({
-        enabled: false,
       })
-    }
-    // The serializer writes the command with its arguments, masked (capture).
-    expect(config['@opentelemetry/instrumentation-ioredis']).toEqual({
-      requireParentSpan: true,
-      dbStatementSerializer: expect.any(Function),
-    })
-    // The app's option is kept next to the capture hook for bind values.
-    expect(config['@opentelemetry/instrumentation-oracledb']).toEqual({
-      enhancedDatabaseReporting: true,
-      requestHook: expect.any(Function),
-    })
-    const ignore =
-      config['@opentelemetry/instrumentation-http'].ignoreIncomingRequestHook
-    expect(ignore({ method: 'OPTIONS', url: '/orders' })).toBe(true)
-    expect(ignore({ method: 'GET', url: '/health?probe=1' })).toBe(true)
-    expect(ignore({ method: 'GET', url: '/metrics' })).toBe(true)
-    expect(ignore({ method: 'GET', url: '/internal' })).toBe(true)
-    expect(ignore({ method: 'GET', url: '/healthcare' })).toBe(false)
-    expect(ignore({ method: 'GET', url: '/orders' })).toBe(false)
-  })
+      for (const name of [
+        'net',
+        'dns',
+        'fs',
+        'router',
+        'pino',
+        'nestjs-core',
+      ]) {
+        expect(config[`@opentelemetry/instrumentation-${name}`]).toEqual({
+          enabled: false,
+        })
+      }
+      // The serializer writes the command with its arguments, masked (capture).
+      expect(config['@opentelemetry/instrumentation-ioredis']).toEqual({
+        requireParentSpan: true,
+        dbStatementSerializer: expect.any(Function),
+      })
+      // The app's option is kept next to the capture hook for bind values.
+      expect(config['@opentelemetry/instrumentation-oracledb']).toEqual({
+        enhancedDatabaseReporting: true,
+        requestHook: expect.any(Function),
+      })
+      const ignore =
+        config['@opentelemetry/instrumentation-http'].ignoreIncomingRequestHook
+      expect(ignore({ method: 'OPTIONS', url: '/orders' })).toBe(true)
+      expect(ignore({ method: 'GET', url: '/health?probe=1' })).toBe(true)
+      expect(ignore({ method: 'GET', url: '/metrics' })).toBe(true)
+      expect(ignore({ method: 'GET', url: '/internal' })).toBe(true)
+      expect(ignore({ method: 'GET', url: '/healthcare' })).toBe(false)
+      expect(ignore({ method: 'GET', url: '/orders' })).toBe(false)
+    },
+  )
 })

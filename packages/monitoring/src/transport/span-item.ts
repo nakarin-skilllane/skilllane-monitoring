@@ -3,8 +3,8 @@ import type {
   SpanItem,
   SpanKindName,
   SpanStatusName,
-} from '@skilllane/monitoring-contract'
-import { hrTimeToNanos, truncateUtf8 } from '@skilllane/monitoring-contract'
+} from 'skilllane-monitoring-contract'
+import { hrTimeToNanos, truncateUtf8 } from 'skilllane-monitoring-contract'
 import { type Attributes, TraceFlags } from '@opentelemetry/api'
 import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base'
 import type { Publisher } from './publisher'

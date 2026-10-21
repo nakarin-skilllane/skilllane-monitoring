@@ -5,14 +5,14 @@
  * dependency lines, no affected queues, no job tracking for telemetry
  * traffic.
  */
-export const INTERNAL = Symbol.for('@skilllane/monitoring.internal-client')
+export const INTERNAL = Symbol.for('skilllane-monitoring.internal-client')
 
 /** Connection name the SDK gives its clients (visible to the broker too). */
 export const INTERNAL_NAME = 'skilllane-monitoring-sdk-telemetry'
 
 /** Set by the kafkajs hook on its subclass: the original Kafka class. */
 export const KAFKAJS_UNPATCHED = Symbol.for(
-  '@skilllane/monitoring.kafkajs-unpatched',
+  'skilllane-monitoring.kafkajs-unpatched',
 )
 
 export function markInternal<T extends object>(target: T): T {

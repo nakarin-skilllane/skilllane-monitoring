@@ -1,7 +1,7 @@
 /**
  * The key rule: which object keys, form / query / bind parameter names,
  * columns, header names, hash fields and Redis key segments hold a secret.
- * One copy for the SDK (@skilllane/monitoring masks before anything leaves the app),
+ * One copy for the SDK (skilllane-monitoring masks before anything leaves the app),
  * the engine (fallback for other senders). SPEC.md §3 of the engine repository.
  */
 
@@ -10,7 +10,7 @@ export const REDACTED = '[REDACTED]'
 /**
  * Version of these rules. The SDK writes it into every envelope's resource
  * (`skilllane.monitoring.mask`); the engine masks items of a sender without it (another SDK,
- * an older @skilllane/monitoring) itself, and trusts items of this version or later.
+ * an older skilllane-monitoring) itself, and trusts items of this version or later.
  */
 export const MASK_VERSION = 2
 export const MASK_RESOURCE_KEY = 'skilllane.monitoring.mask'

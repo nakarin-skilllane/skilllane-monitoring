@@ -1,5 +1,5 @@
 /**
- * @skilllane/monitoring-contract: the wire format between @skilllane/monitoring (publisher, inside
+ * skilllane-monitoring-contract: the wire format between skilllane-monitoring (publisher, inside
  * the customer's app) and the skilllane-monitoring engine (subscriber, writes ClickHouse).
  *
  * One queue message = one Envelope, encoded as UTF-8 JSON. Version 1.
@@ -100,7 +100,7 @@ export interface Envelope<T> {
 export type LogLevelName = 'debug' | 'info' | 'warn' | 'error' | 'fatal'
 
 /**
- * One log line exactly as @skilllane/monitoring writes it to stdout: flat ECS keys
+ * One log line exactly as skilllane-monitoring writes it to stdout: flat ECS keys
  * with dots, already redacted. `labels` is the only nested object.
  */
 export type LogItem = {
@@ -267,7 +267,7 @@ export function parseEnvelope(
   else if (raw instanceof Uint8Array)
     value = JSON.parse(Buffer.from(raw).toString('utf8'))
   if (!isEnvelope(value))
-    throw new Error('Not an @skilllane/monitoring-contract v1 envelope')
+    throw new Error('Not an skilllane-monitoring-contract v1 envelope')
   return value
 }
 

@@ -442,7 +442,7 @@ export class AppLogger implements LoggerService {
     this.emit({
       level: 'warn',
       event: 'app.log',
-      logger: '@skilllane/monitoring',
+      logger: 'skilllane-monitoring',
       message,
       fields,
       labels: {},

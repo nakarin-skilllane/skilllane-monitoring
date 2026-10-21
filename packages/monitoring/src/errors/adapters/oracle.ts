@@ -14,9 +14,16 @@ function oracleCode(error: any): string | undefined {
   return fromMessage?.[0]
 }
 
+/** The driver's own string code when it is not Oracle: pg `23505`, mysql `ER_DUP_ENTRY`. */
+function driverCode(error: any): string | undefined {
+  return typeof error?.code === 'string' && error.code ? error.code : undefined
+}
+
 // node-oracledb errors and TypeORM QueryFailedError wrapping them. The error
 // line reads neither the query text nor the bind values: both are on the
 // db span (db.statement, skilllane.monitoring.db.parameters, masked; src/capture/db.ts).
+// A QueryFailedError from another driver (pg, mysql) keeps that driver's code
+// and no dependency, so the generic SQLSTATE / ER_ patterns apply.
 export const oracleAdapter: ErrorAdapter = {
   name: 'oracle',
   match: (error) =>
@@ -27,10 +34,11 @@ export const oracleAdapter: ErrorAdapter = {
   extract: (error) => {
     const driverError =
       error?.name === 'QueryFailedError' ? error.driverError : undefined
+    const oracle = oracleCode(error) ?? oracleCode(driverError)
     return {
-      code: oracleCode(error) ?? oracleCode(driverError),
+      code: oracle ?? driverCode(driverError) ?? driverCode(error),
       cause: driverError && driverError !== error ? driverError : error?.cause,
-      dependency: 'oracle',
+      dependency: oracle ? 'oracle' : undefined,
     }
   },
 }

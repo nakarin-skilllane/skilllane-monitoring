@@ -15,7 +15,7 @@ import { isInternal } from '../transport/internal'
  * these modules; turn off with LOG_AUTO_WATCH=false. CommonJS only.
  */
 
-const PATCHED = Symbol.for('@skilllane/monitoring.auto-watch-patched')
+const PATCHED = Symbol.for('skilllane-monitoring.auto-watch-patched')
 
 function markPatched(target: any): boolean {
   if (!target || target[PATCHED]) return false

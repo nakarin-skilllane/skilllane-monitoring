@@ -1,15 +1,30 @@
 {
-  "name": "@skilllane/monitoring-contract",
+  "name": "skilllane-monitoring-contract",
   "version": "0.1.0",
-  "description": "Wire format between @skilllane/monitoring (publisher) and the skilllane-monitoring engine (subscriber)",
+  "description": "Wire format shared by skilllane-monitoring (publisher) and the skilllane-monitoring engine (subscriber): stream names, headers, the envelope and the masking rules",
+  "license": "ISC",
+  "author": "Nakarin Maneekhat",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nakarin-skilllane/skilllane-monitoring.git",
+    "directory": "packages/monitoring-contract"
+  },
+  "homepage": "https://github.com/nakarin-skilllane/skilllane-monitoring/tree/main/packages/monitoring-contract#readme",
+  "bugs": {
+    "url": "https://github.com/nakarin-skilllane/skilllane-monitoring/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "clean": "rm -rf dist"
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",

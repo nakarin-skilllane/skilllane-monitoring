@@ -5,7 +5,7 @@ import { isBootFailureLogged, markBootFailureLogged } from './boot-failure'
 import { autoLoggingModule, isLoggingModuleDeclared } from './logging.module'
 import { setupLogging } from './setup-logging'
 
-const PATCHED = Symbol.for('@skilllane/monitoring.nest-factory-patched')
+const PATCHED = Symbol.for('skilllane-monitoring.nest-factory-patched')
 
 let hook: Hook | undefined
 

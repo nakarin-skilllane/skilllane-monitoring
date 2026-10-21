@@ -33,21 +33,36 @@ One file per source; `index.ts` concatenates them and `../hints.ts` builds the l
 - The meaning must match the library's official documentation.
 - `test/patterns.test.ts` enforces lengths, placeholders and unique keys.
 
-## Where each file's codes came from (school-core-api scan, 2026-10-06)
+## Where each file's codes came from
+
+Two passes: a school-core-api scan (2026-10-06) for the codes the service actually
+throws, then the official code lists of every library (2026-10-20) so the table
+covers what we expect to meet, not only what we have met.
 
 | File | Evidence |
 | --- | --- |
-| `oracle.ts` | `src/common/types/oracle-error-code.ts`, `common/filters/exception.filter.ts:134-185`, `database/database.config.ts:74-82` (pool max 20, queue 500), comments in repositories (ORA-01795, NJS-098, ORA-01722, ORA-00904, ORA-00936, ORA-01407). Connection codes from node-oracledb docs. |
-| `node-net.ts` | `oracle-iam/oracle-api-error.handler.ts:30-127`, `google/google-api-error.handler.ts:20-24`, `partner-exercise-iframe.adapter.ts:123-124` |
-| `redis.ts` | `src/redis/config/redis-connection.constants.ts:3-37` (commandTimeout, maxRetriesPerRequest=5); reply codes from Redis docs |
-| `bullmq.ts` | `common/global-queue/worker-host/worker-host.processor.ts`, `keyed-concurrency-limiter.ts:7` |
-| `kafka.ts` | `common/kafka/services/kafka-consumer.service.ts`, `kafka-producer.service.ts:77`, `kafka-publish-timeout.exception.ts` |
-| `rabbitmq.ts` | `common/rabbitMQ/rabbitmq.service.ts:102-152`; close codes from AMQP 0-9-1 spec |
-| `http.ts` | `thaid.provider.ts`, `oracle-api-error.handler.ts` (ldapts errors), axios error codes |
-| `google.ts` | `google-api-error.handler.ts:45-214`, `google-rate-limit.service.ts:91-108`, `login-with-google-callback.handler.ts:125` |
-| `s3.ts` | `common/service/storage-v2/providers/aws.provider.ts:96,133-770` |
-| `smtp.ts` | `common/service/email/email.service.ts:67-99`; nodemailer error codes |
-| `nest-http.ts` | Throw counts: BadRequest 1,038 · NotFound 631 · Forbidden 270 · InternalServerError 228 · Conflict 204 |
-| `typeorm.ts` | `findOneOrFail` ×122, query runners/transactions ×318 in school-core-api; TypeORM 0.3.19 error classes |
-| `runtime.ts` | V8 TypeError / ReferenceError / RangeError messages (bugs in our code) |
-| `app.ts` | `auth.service.ts:91-99` (JWT), `exception.filter.ts` errorCodes, Excel import errorCodes |
+| `oracle.ts` | `src/common/types/oracle-error-code.ts`, `common/filters/exception.filter.ts:134-185`, `database/database.config.ts:74-82` (pool max 20, queue 500), comments in repositories (ORA-01795, NJS-098, ORA-01722, ORA-00904, ORA-00936, ORA-01407). Then Oracle Database Error Messages (common ORA- codes: connection, PL/SQL, constraints, dates, tablespaces, TNS 12xxx), `node-oracledb/lib/errors.js` (NJS-), ODPI-C (DPI-). |
+| `postgres.ts` | PostgreSQL errcodes appendix (SQLSTATE classes 08, 22, 23, 25, 28, 3D/3F, 40, 42, 53, 54, 55, 57, XX), node-postgres `client.js` messages |
+| `mysql.ts` | mysql/mysql2 `lib/protocol/constants/errors.js` (ER_ names), client PROTOCOL_* / POOL_* codes |
+| `mongodb.ts` | MongoDB driver error classes, server codes 11000/13/18/50/112/121/251, Mongoose errors |
+| `typeorm.ts` | `findOneOrFail` ×122, query runners/transactions ×318 in school-core-api; TypeORM 0.3 `src/error/*` (every class), QueryBuilder messages |
+| `node-net.ts` | `oracle-iam/oracle-api-error.handler.ts:30-127`, `google/google-api-error.handler.ts:20-24`, `partner-exercise-iframe.adapter.ts:123-124`; nodejs.org/api/errors.html "Common system errors" + ERR_SOCKET_* / ERR_SERVER_* |
+| `node-tls.ts` | Node ERR_TLS_* / ERR_SSL_* / ERR_OSSL_* / ERR_CRYPTO_*, OpenSSL `crypto/x509/x509_txt.c` (X509_V_ERR names Node copies into `code`) |
+| `node-http.ts` | Node ERR_HTTP_* / ERR_STREAM_*, llhttp HPE_* parser codes |
+| `node-core.ts` | Node ERR_INVALID_ARG_*, ERR_OUT_OF_RANGE, modules (MODULE_NOT_FOUND, ERR_REQUIRE_ESM, ERR_PACKAGE_PATH_NOT_EXPORTED), workers, child processes, ABORT_ERR, DOMException AbortError/TimeoutError |
+| `fetch.ts` | undici `lib/core/errors.js` (UND_ERR_*), node-fetch FetchError types, global fetch "fetch failed" / "terminated" |
+| `redis.ts` | `src/redis/config/redis-connection.constants.ts:3-37` (commandTimeout, maxRetriesPerRequest=5); reply prefixes from `redis/src/server.c` shared replies + cluster spec (MOVED, ASK, TRYAGAIN, CLUSTERDOWN, CROSSSLOT); ioredis `Redis.ts` / `cluster/index.ts` messages |
+| `bullmq.ts` | `common/global-queue/worker-host/worker-host.processor.ts`, `keyed-concurrency-limiter.ts:7`; BullMQ `scripts.ts` finishedErrors, `worker.ts` / `job.ts` messages, `classes/errors/*` |
+| `kafka.ts` | `common/kafka/services/kafka-consumer.service.ts`, `kafka-producer.service.ts:77`, `kafka-publish-timeout.exception.ts`; kafkajs `src/errors.js` (all classes), Kafka `Errors.java` protocol error codes |
+| `rabbitmq.ts` | `common/rabbitMQ/rabbitmq.service.ts:102-152`; AMQP 0-9-1 reply codes (rabbitmq/amqp-0.9.1-spec constants), amqplib `connection.js` / `channel.js` messages |
+| `http.ts` | `thaid.provider.ts`, `oracle-api-error.handler.ts`; axios `AxiosError.js` codes, Node "socket hang up" |
+| `ldap.ts` | ldapts error classes (one per LDAP result code, RFC 4511) |
+| `google.ts` | `google-api-error.handler.ts:45-214`, `google-rate-limit.service.ts:91-108`, `login-with-google-callback.handler.ts:125`; Drive / Calendar "Resolve errors" pages, OAuth 2.0 web-server error codes, google.rpc.Code status names |
+| `s3.ts` | `common/service/storage-v2/providers/aws.provider.ts:96,133-770`; S3 API ErrorResponses code list, AWS SDK v3 / STS client errors |
+| `smtp.ts` | `common/service/email/email.service.ts:67-99`; nodemailer error codes, RFC 5321 §4.2.3 reply codes, RFC 4954 (530/534/535/538) |
+| `nest-http.ts` | Throw counts: BadRequest 1,038 · NotFound 631 · Forbidden 270 · InternalServerError 228 · Conflict 204; one entry per built-in HttpException class |
+| `nest-core.ts` | `@nestjs/core/errors/messages.ts` (DI, module, route errors), @nestjs/graphql and @nestjs/swagger type reflection messages |
+| `http-body.ts` | body-parser / raw-body error `type` values, multer `multer-error.js` codes, busboy messages |
+| `browser.ts` | Puppeteer / Playwright navigation, target and launch messages, Chromium net::ERR_* |
+| `runtime.ts` | V8 TypeError / ReferenceError / RangeError / SyntaxError messages (bugs in our code), heap OOM text |
+| `app.ts` | `auth.service.ts:91-99` (JWT), `exception.filter.ts` errorCodes, Excel import errorCodes; jsonwebtoken `verify.js` messages, validation libraries (Joi/Yup/Mongoose ValidationError, ZodError, CastError) |
