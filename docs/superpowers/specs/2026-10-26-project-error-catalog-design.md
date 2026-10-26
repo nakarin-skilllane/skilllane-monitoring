@@ -80,8 +80,17 @@ key ของ `catalog` คือ code (string หรือตัวเลข �
   - หา code ใน `src/` (`errorCode` และ `code: '…'` ใน `this.logger.*`) ที่ไม่มีในตาราง
   - exit 1 เมื่อมีข้อผิดตามกฎ, 0 เมื่อมีแค่คำเตือน
 
+- `uninstall [--path …] [--yes] [--force]` ถอดทุกอย่างในคำสั่งเดียว
+  1. หาไฟล์ตาราง (`--path` → `LOG_CONFIG_FILE` → ตำแหน่งมาตรฐาน) ลบไฟล์ และลบโฟลเดอร์ของไฟล์เมื่อว่างแล้วเท่านั้น (ไม่ลบ `src/` และไม่ลบไฟล์อื่นของทีม)
+  2. สแกน `.ts` / `.js` ใน `src/` (ไม่รวม `node_modules`, `dist`):
+     บรรทัดที่เป็น import เปล่า `import 'skilllane-monitoring/register'` หรือ `require('skilllane-monitoring/register')` → ลบบรรทัด (เช่น `src/main.ts`, `src/instrumentation.ts`)
+     การอ้าง `skilllane-monitoring` แบบอื่น (`LoggingModule`, `AppError`, `registerTelemetry` …) → ไม่แก้ แสดงไฟล์:บรรทัด แล้วหยุด (exit 1) เว้นแต่ใส่ `--force`
+  3. ไฟล์นอก `src/` ที่ root ของแอป (`Dockerfile*`, `package.json` ส่วน scripts, `.env*`, `docker-compose*`, `*.sh`) ที่มีคำว่า `skilllane-monitoring` (เช่น `NODE_OPTIONS`) → แสดงเป็นคำเตือน ไม่แก้
+  4. แสดงแผนทั้งหมดแล้วถาม `Continue? (y/N)` ข้ามด้วย `--yes` ตอบอย่างอื่น = ไม่ทำอะไร exit 1
+  5. ทำข้อ 1–2 แล้วรันคำสั่งถอดตาม lockfile ที่ใกล้ที่สุด (`pnpm-lock.yaml` → `pnpm remove`, `yarn.lock` → `yarn remove`, `package-lock.json` / ไม่มี → `npm uninstall`) ในโฟลเดอร์ของแอป exit code = ของคำสั่งนั้น
+
 ## นอกขอบเขต
 `error.fix` / `explain` จากตารางของโปรเจค · adapter ของโปรเจค · การลบไฟล์อัตโนมัติตอน uninstall (pnpm / npm ไม่รองรับ)
 
 ## ทดสอบ (vitest)
-โหลดไฟล์ทั้ง 3 ตำแหน่ง + `LOG_CONFIG_FILE` (.ts → dist, dist/src, .js) · ไม่เจอ / โหลดล้ม · ลำดับ hint (dev hint > โปรเจค > ในตัว) · code ตัวเลข · `codeOf` throw · `messageMatch` · กฎใส่ผิดทุกข้อ · `level: warn` + 5xx · CLI `init` (ร่างรายการ, ไม่เขียนทับ) และ `check` (exit code, code ที่ไม่มีในตาราง)
+โหลดไฟล์ทั้ง 3 ตำแหน่ง + `LOG_CONFIG_FILE` (.ts → dist, dist/src, .js) · ไม่เจอ / โหลดล้ม · ลำดับ hint (dev hint > โปรเจค > ในตัว) · code ตัวเลข · `codeOf` throw · `messageMatch` · กฎใส่ผิดทุกข้อ · `level: warn` + 5xx · CLI `init` (ร่างรายการ, ไม่เขียนทับ) และ `check` (exit code, code ที่ไม่มีในตาราง) · `uninstall` (ลบไฟล์/โฟลเดอร์ว่าง, เก็บโฟลเดอร์ที่มีไฟล์อื่น, ลบบรรทัด register ใน main.ts / instrumentation.ts, หยุดเมื่อมี import อื่น, `--force`, ตอบ N, เลือกคำสั่งถอดตาม lockfile โดยไม่ถอดจริงใน test)

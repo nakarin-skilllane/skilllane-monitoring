@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** ให้แอปมีตาราง error ของตัวเองในไฟล์เดียว (`src/skilllane-monitoring/errors.ts`) ที่ SDK โหลดเองตอน start แล้วใช้หา hint ก่อนตารางในตัว พร้อมคำสั่ง `skilllane-monitoring errors init|check`
+**Goal:** ให้แอปมีตาราง error ของตัวเองในไฟล์เดียว (`src/skilllane-monitoring/errors.ts`) ที่ SDK โหลดเองตอน start แล้วใช้หา hint ก่อนตารางในตัว พร้อมคำสั่ง `skilllane-monitoring errors init|check` และ `skilllane-monitoring uninstall`
 
 **Architecture:** โมดูลใหม่ 2 ตัวใน `src/errors/`: `project-catalog.ts` (ตรวจ/ปรับรายการ เก็บสถานะ ให้ `codeOf`) และ `catalog-loader.ts` (หาไฟล์ โหลด เขียนบรรทัดสรุป) `hints.ts` ถามตารางของโปรเจคก่อนตารางในตัว `error-serializer.ts` ใช้ `codeOf` ก่อน adapter `register.ts` เรียก loader ครั้งเดียว CLI อยู่ใน `src/cli/` เป็น bin ของ package
 
@@ -35,9 +35,10 @@
 | Create `src/cli/scan.ts` | สแกน `src/` หา errorCode, ข้อความ throw ที่ซ้ำ, code ใน logger |
 | Create `src/cli/template.ts` | สร้างเนื้อหาไฟล์ `errors.ts` |
 | Create `src/cli/errors-init.ts`, `src/cli/errors-check.ts` | คำสั่งทั้งสอง (คืน exit code ไม่เรียก `process.exit` เอง) |
+| Create `src/cli/uninstall.ts` | วางแผน + ทำการถอด (ลบไฟล์ตาราง, ลบบรรทัด register, รันคำสั่งถอดของ package manager) |
 | Modify `package.json` | `bin`, `version` |
 | Modify `README.md` | **ห้ามแก้** (มีงานค้าง) — เขียนคู่มือใน `docs/project-error-catalog.md` แทน |
-| Tests | `test/project-catalog.test.ts`, `test/project-hints.test.ts`, `test/catalog-loader.test.ts`, `test/cli-errors.test.ts` |
+| Tests | `test/project-catalog.test.ts`, `test/project-hints.test.ts`, `test/catalog-loader.test.ts`, `test/cli-errors.test.ts`, `test/cli-uninstall.test.ts` |
 
 ---
 
@@ -1234,12 +1235,325 @@ git commit -m "feat(cli): errors check and the skilllane-monitoring bin"
 
 ---
 
-### Task 6: คู่มือ + ตรวจทั้งชุด + ทดลองกับแอปจริง
+### Task 6: CLI `uninstall`
+
+**Files:**
+- Create: `src/cli/uninstall.ts`
+- Modify: `src/cli/index.ts` (route `uninstall`, `runCli` คืน `number | Promise<number>`)
+- Test: `test/cli-uninstall.test.ts`
+
+**Interfaces:**
+- Consumes: `DEFAULT_PATH` (Task 4), `runCli` (Task 5)
+- Produces:
+  - `interface Ref { file: string; line: number; text: string }` (`file` สัมพัทธ์กับ cwd, `line` นับจาก 1)
+  - `interface UninstallPlan { deleteFiles: string[]; deleteDirs: string[]; lineEdits: Ref[]; blockers: Ref[]; outside: Ref[]; removeCommand: string[] }`
+  - `function planUninstall(o: { cwd: string; path?: string }): UninstallPlan`
+  - `function applyUninstall(plan: UninstallPlan, cwd: string): void`
+  - `function uninstall(o: { cwd: string; path?: string; yes?: boolean; force?: boolean; ask?: (q: string) => Promise<boolean>; run?: (cmd: string[], cwd: string) => number; out?: (l: string) => void }): Promise<number>`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// test/cli-uninstall.test.ts
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { describe, expect, it } from 'vitest'
+import { planUninstall, uninstall } from '../src/cli/uninstall'
+
+function project(files: Record<string, string>): string {
+  const root = mkdtempSync(join(tmpdir(), 'slm-uninstall-'))
+  writeFileSync(join(root, 'package.json'), '{"name":"app","dependencies":{"skilllane-monitoring":"^0.3.0"}}')
+  for (const [rel, body] of Object.entries(files)) {
+    mkdirSync(join(root, rel, '..'), { recursive: true })
+    writeFileSync(join(root, rel), body)
+  }
+  return root
+}
+
+const APP = {
+  'pnpm-lock.yaml': '',
+  'src/skilllane-monitoring/errors.ts': 'export default { errors: { catalog: {} } }',
+  'src/main.ts': `// CI trigger 8\nimport 'skilllane-monitoring/register'\nimport './instrumentation'\n`,
+  'src/instrumentation.ts': `import 'dotenv/config'\nimport 'skilllane-monitoring/register'\n\nif (process.env.X) require('./x')\n`,
+  'Dockerfile': `ENV NODE_OPTIONS="--require skilllane-monitoring/register"\n`,
+}
+
+function run(): { calls: string[][]; fn: (cmd: string[]) => number } {
+  const calls: string[][] = []
+  return { calls, fn: (cmd) => { calls.push(cmd); return 0 } }
+}
+
+describe('planUninstall', () => {
+  it('lists the catalog, the register lines, outside references and the pnpm command', () => {
+    const root = project(APP)
+    const plan = planUninstall({ cwd: root })
+    expect(plan.deleteFiles).toEqual(['src/skilllane-monitoring/errors.ts'])
+    expect(plan.deleteDirs).toEqual(['src/skilllane-monitoring'])
+    expect(plan.lineEdits).toEqual([
+      { file: 'src/instrumentation.ts', line: 2, text: `import 'skilllane-monitoring/register'` },
+      { file: 'src/main.ts', line: 2, text: `import 'skilllane-monitoring/register'` },
+    ])
+    expect(plan.blockers).toEqual([])
+    expect(plan.outside).toEqual([{ file: 'Dockerfile', line: 1, text: 'ENV NODE_OPTIONS="--require skilllane-monitoring/register"' }])
+    expect(plan.removeCommand).toEqual(['pnpm', 'remove', 'skilllane-monitoring'])
+  })
+
+  it('keeps a folder that holds other files and picks npm without a pnpm lock', () => {
+    const root = project({ 'src/skilllane-monitoring/errors.ts': '', 'src/skilllane-monitoring/notes.md': 'mine', 'package-lock.json': '{}' })
+    const plan = planUninstall({ cwd: root })
+    expect(plan.deleteDirs).toEqual([])
+    expect(plan.removeCommand).toEqual(['npm', 'uninstall', 'skilllane-monitoring'])
+  })
+
+  it('treats other imports as blockers', () => {
+    const root = project({ 'src/app.module.ts': `import { LoggingModule } from 'skilllane-monitoring'\n` })
+    expect(planUninstall({ cwd: root }).blockers).toEqual([
+      { file: 'src/app.module.ts', line: 1, text: `import { LoggingModule } from 'skilllane-monitoring'` },
+    ])
+  })
+})
+
+describe('uninstall', () => {
+  it('removes the catalog, the register lines, then runs the package manager', async () => {
+    const root = project(APP)
+    const r = run()
+    expect(await uninstall({ cwd: root, yes: true, run: r.fn, out: () => {} })).toBe(0)
+    expect(existsSync(join(root, 'src/skilllane-monitoring'))).toBe(false)
+    expect(readFileSync(join(root, 'src/main.ts'), 'utf8')).toBe(`// CI trigger 8\nimport './instrumentation'\n`)
+    expect(readFileSync(join(root, 'src/instrumentation.ts'), 'utf8')).toBe(`import 'dotenv/config'\n\nif (process.env.X) require('./x')\n`)
+    expect(readFileSync(join(root, 'Dockerfile'), 'utf8')).toContain('NODE_OPTIONS')
+    expect(r.calls).toEqual([['pnpm', 'remove', 'skilllane-monitoring']])
+  })
+
+  it('stops on other imports unless --force', async () => {
+    const root = project({ ...APP, 'src/app.module.ts': `import { LoggingModule } from 'skilllane-monitoring'\n` })
+    const r = run()
+    const out: string[] = []
+    expect(await uninstall({ cwd: root, yes: true, run: r.fn, out: (l) => out.push(l) })).toBe(1)
+    expect(r.calls).toEqual([])
+    expect(existsSync(join(root, 'src/skilllane-monitoring/errors.ts'))).toBe(true)
+    expect(out.join('\n')).toContain('src/app.module.ts:1')
+    expect(await uninstall({ cwd: root, yes: true, force: true, run: r.fn, out: () => {} })).toBe(0)
+    expect(r.calls).toHaveLength(1)
+  })
+
+  it('does nothing when the answer is not yes', async () => {
+    const root = project(APP)
+    const r = run()
+    expect(await uninstall({ cwd: root, ask: async () => false, run: r.fn, out: () => {} })).toBe(1)
+    expect(existsSync(join(root, 'src/skilllane-monitoring/errors.ts'))).toBe(true)
+    expect(readFileSync(join(root, 'src/main.ts'), 'utf8')).toContain('skilllane-monitoring/register')
+    expect(r.calls).toEqual([])
+  })
+
+  it('returns the package manager exit code', async () => {
+    const root = project(APP)
+    expect(await uninstall({ cwd: root, yes: true, run: () => 3, out: () => {} })).toBe(3)
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pnpm exec vitest run test/cli-uninstall.test.ts`
+Expected: FAIL — `Failed to resolve import "../src/cli/uninstall"`
+
+- [ ] **Step 3: Write minimal implementation**
+
+```ts
+// src/cli/uninstall.ts
+import { spawnSync } from 'child_process'
+import { existsSync, readdirSync, readFileSync, rmdirSync, rmSync, statSync, writeFileSync } from 'fs'
+import { createInterface } from 'readline'
+import { dirname, join, relative, resolve } from 'path'
+import { DEFAULT_PATH } from './errors-init'
+
+export interface Ref {
+  file: string
+  line: number
+  text: string
+}
+
+export interface UninstallPlan {
+  deleteFiles: string[]
+  deleteDirs: string[]
+  /** Bare register imports, removed. */
+  lineEdits: Ref[]
+  /** Other uses of the SDK: the build breaks without the package. */
+  blockers: Ref[]
+  /** Mentions outside src/ (NODE_OPTIONS, scripts): reported, never edited. */
+  outside: Ref[]
+  removeCommand: string[]
+}
+
+const PACKAGE = 'skilllane-monitoring'
+const BARE_REGISTER = /^\s*(?:import\s+['"]skilllane-monitoring\/register['"]|require\(\s*['"]skilllane-monitoring\/register['"]\s*\))\s*;?\s*$/
+const ANY_USE = /['"]skilllane-monitoring(?:\/[\w-]+)?['"]/
+const OUTSIDE_FILE = /^(Dockerfile.*|package\.json|\.env.*|docker-compose.*\.ya?ml|.*\.sh)$/
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage'])
+
+function sourceFiles(dir: string): string[] {
+  const files: string[] = []
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name)
+    if (statSync(full).isDirectory()) {
+      if (!SKIP_DIRS.has(name)) files.push(...sourceFiles(full))
+    } else if (/\.(ts|js|mjs|cjs)$/.test(name)) {
+      files.push(full)
+    }
+  }
+  return files.sort()
+}
+
+function removeCommandFor(cwd: string): string[] {
+  let dir = cwd
+  for (;;) {
+    if (existsSync(join(dir, 'pnpm-lock.yaml'))) return ['pnpm', 'remove', PACKAGE]
+    if (existsSync(join(dir, 'yarn.lock'))) return ['yarn', 'remove', PACKAGE]
+    if (existsSync(join(dir, 'package-lock.json'))) return ['npm', 'uninstall', PACKAGE]
+    const parent = dirname(dir)
+    if (parent === dir) return ['npm', 'uninstall', PACKAGE]
+    dir = parent
+  }
+}
+
+export function planUninstall(o: { cwd: string; path?: string }): UninstallPlan {
+  const rel = o.path ?? (process.env.LOG_CONFIG_FILE?.trim() || DEFAULT_PATH)
+  const catalog = resolve(o.cwd, rel)
+  const plan: UninstallPlan = { deleteFiles: [], deleteDirs: [], lineEdits: [], blockers: [], outside: [], removeCommand: removeCommandFor(o.cwd) }
+  if (existsSync(catalog)) {
+    plan.deleteFiles.push(relative(o.cwd, catalog))
+    const folder = dirname(catalog)
+    const others = readdirSync(folder).filter((name) => join(folder, name) !== catalog)
+    if (!others.length && folder !== resolve(o.cwd, 'src')) plan.deleteDirs.push(relative(o.cwd, folder))
+  }
+  const srcDir = join(o.cwd, 'src')
+  if (existsSync(srcDir)) {
+    for (const file of sourceFiles(srcDir)) {
+      if (file === catalog) continue
+      readFileSync(file, 'utf8').split('\n').forEach((text, i) => {
+        const ref = { file: relative(o.cwd, file), line: i + 1, text: text.trim() }
+        if (BARE_REGISTER.test(text)) plan.lineEdits.push(ref)
+        else if (ANY_USE.test(text)) plan.blockers.push(ref)
+      })
+    }
+  }
+  for (const name of readdirSync(o.cwd).sort()) {
+    if (!OUTSIDE_FILE.test(name) || statSync(join(o.cwd, name)).isDirectory()) continue
+    readFileSync(join(o.cwd, name), 'utf8').split('\n').forEach((text, i) => {
+      // the dependency entry itself goes away with the package manager command
+      if (text.includes(PACKAGE) && !(name === 'package.json' && /"skilllane-monitoring"\s*:\s*"[^"]*"/.test(text))) {
+        plan.outside.push({ file: name, line: i + 1, text: text.trim() })
+      }
+    })
+  }
+  return plan
+}
+
+export function applyUninstall(plan: UninstallPlan, cwd: string): void {
+  const byFile = new Map<string, Set<number>>()
+  for (const edit of plan.lineEdits) byFile.set(edit.file, (byFile.get(edit.file) ?? new Set()).add(edit.line))
+  for (const [file, lines] of byFile) {
+    const full = join(cwd, file)
+    const kept = readFileSync(full, 'utf8').split('\n').filter((_, i) => !lines.has(i + 1))
+    writeFileSync(full, kept.join('\n'))
+  }
+  for (const file of plan.deleteFiles) rmSync(join(cwd, file))
+  for (const dir of plan.deleteDirs) rmdirSync(join(cwd, dir))
+}
+
+function askYesNo(question: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  return new Promise((done) => rl.question(question, (answer) => { rl.close(); done(/^y(es)?$/i.test(answer.trim())) }))
+}
+
+function runCommand(cmd: string[], cwd: string): number {
+  return spawnSync(cmd[0], cmd.slice(1), { cwd, stdio: 'inherit', shell: process.platform === 'win32' }).status ?? 1
+}
+
+export async function uninstall(o: {
+  cwd: string
+  path?: string
+  yes?: boolean
+  force?: boolean
+  ask?: (question: string) => Promise<boolean>
+  run?: (cmd: string[], cwd: string) => number
+  out?: (line: string) => void
+}): Promise<number> {
+  const out = o.out ?? ((line: string) => console.log(line))
+  const plan = planUninstall(o)
+  const show = (title: string, refs: Ref[]) => {
+    if (!refs.length) return
+    out(title)
+    for (const r of refs) out(`  ${r.file}:${r.line}  ${r.text}`)
+  }
+  if (plan.deleteFiles.length || plan.deleteDirs.length) {
+    out('Delete:')
+    for (const f of [...plan.deleteFiles, ...plan.deleteDirs]) out(`  ${f}`)
+  }
+  show('Remove these lines:', plan.lineEdits)
+  show('Uses of the SDK to fix by hand (the build breaks without the package):', plan.blockers)
+  show('Outside src/, not changed (an app with NODE_OPTIONS still requiring the SDK will not start):', plan.outside)
+  out(`Then run: ${plan.removeCommand.join(' ')}`)
+  if (plan.blockers.length && !o.force) {
+    out('Stopped: fix the uses above first, or run again with --force')
+    return 1
+  }
+  if (!o.yes && !(await (o.ask ?? askYesNo)('Continue? (y/N) '))) {
+    out('Nothing changed')
+    return 1
+  }
+  applyUninstall(plan, o.cwd)
+  const status = (o.run ?? runCommand)(plan.removeCommand, o.cwd)
+  if (status !== 0) out(`${plan.removeCommand.join(' ')} exited with ${status}; the files above were already changed`)
+  return status
+}
+```
+
+ใน `src/cli/index.ts`: เพิ่ม import, บรรทัดใน `USAGE`, route และเปลี่ยนชนิดที่คืน
+
+```ts
+import { uninstall } from './uninstall'
+// USAGE เพิ่ม:
+//   skilllane-monitoring uninstall [--path …] [--yes] [--force]
+
+export function runCli(argv: string[], cwd: string, out: (line: string) => void = (l) => console.log(l)): number | Promise<number> {
+  const [group, command] = argv
+  const path = flag(argv, '--path')
+  if (group === 'uninstall') {
+    return uninstall({ cwd, path, yes: argv.includes('--yes'), force: argv.includes('--force'), out })
+  }
+  // …errors init / check เดิม…
+}
+
+if (require.main === module) {
+  void Promise.resolve(runCli(process.argv.slice(2), process.cwd())).then((code) => {
+    process.exitCode = code
+  })
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `pnpm exec vitest run test/cli-uninstall.test.ts test/cli-errors.test.ts`
+Expected: PASS ทั้งสองไฟล์ (test ของ `runCli` ใน Task 5 ยังได้ `number` สำหรับ `errors init` / ค่า 64)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/cli/uninstall.ts src/cli/index.ts test/cli-uninstall.test.ts
+git commit -m "feat(cli): uninstall removes the catalog, the register imports and the package"
+```
+
+---
+
+### Task 7: คู่มือ + ตรวจทั้งชุด + ทดลองกับแอปจริง
 
 **Files:**
 - Create: `docs/project-error-catalog.md` (คู่มือภาษาไทย ไม่แตะ `README.md` ที่มีงานค้าง)
 
-- [ ] **Step 1: เขียนคู่มือ** `docs/project-error-catalog.md` มีหัวข้อ: ทำอะไรได้ · `pnpm skilllane-monitoring errors init` · ตัวอย่างไฟล์ (จาก spec) · กฎและผลเมื่อใส่ผิด (ตารางจาก spec) · ตำแหน่งไฟล์และ `LOG_CONFIG_FILE` (รวมการแปลง `src/…ts` → `dist/…js` และ `dist/src/…js`) · บรรทัดตอน start 4 แบบ · `errors check` ใน CI · ข้อจำกัด: ไฟล์แบบ ES module โหลดไม่ได้ (บรรทัด `failed to load`), `outDir` ที่ไม่ใช่ `dist` ต้องตั้ง `LOG_CONFIG_FILE` เป็น `.js` · การถอด: ลบไฟล์
+- [ ] **Step 1: เขียนคู่มือ** `docs/project-error-catalog.md` มีหัวข้อ: ทำอะไรได้ · `pnpm skilllane-monitoring errors init` · ตัวอย่างไฟล์ (จาก spec) · กฎและผลเมื่อใส่ผิด (ตารางจาก spec) · ตำแหน่งไฟล์และ `LOG_CONFIG_FILE` (รวมการแปลง `src/…ts` → `dist/…js` และ `dist/src/…js`) · บรรทัดตอน start 4 แบบ · `errors check` ใน CI · ข้อจำกัด: ไฟล์แบบ ES module โหลดไม่ได้ (บรรทัด `failed to load`), `outDir` ที่ไม่ใช่ `dist` ต้องตั้ง `LOG_CONFIG_FILE` เป็น `.js` · การถอด: `pnpm skilllane-monitoring uninstall` (ทำอะไร, `--yes`, `--force`, สิ่งที่ไม่แก้ให้นอก `src/`) และถ้าถอดด้วย `pnpm remove` ตรง ๆ ให้ลบไฟล์เอง
 
 - [ ] **Step 2: ตรวจทั้งชุด**
 
@@ -1253,8 +1567,11 @@ cd ../../../pluton-monorepo/packages/school-core-api
 node ../../../skilllane-monitoring/packages/monitoring/dist/cli/index.js errors init --min-repeat 10
 node ../../../skilllane-monitoring/packages/monitoring/dist/cli/index.js errors check; echo "exit=$?"
 git status --short src/skilllane-monitoring && git diff --stat
+# ดูแผนของ uninstall โดยไม่ทำจริง: ตอบ N
+printf 'n\n' | node ../../../skilllane-monitoring/packages/monitoring/dist/cli/index.js uninstall; echo "exit=$?"
 ```
 Expected: สร้าง `src/skilllane-monitoring/errors.ts` มี `errorCode` ของคลาสลูก `BaseException` (ราว 26 code) และข้อความซ้ำ ≥ 10 ที่ (`User not found`, `Invalid token`, `User is not a student`, `Token expired`, `School not found`, `Exam room not found`, `School context is required`) · `check` exit 1 (hint ยังว่าง) และรายการ error ว่า `hint is required` · `git diff --stat` ไม่มีไฟล์อื่นเปลี่ยน
+`uninstall` ที่ตอบ N ต้องแสดง: ลบ `src/skilllane-monitoring/errors.ts` + โฟลเดอร์, ลบบรรทัด register ใน `src/instrumentation.ts:2` (และ `src/main.ts:2` ถ้ายังมี), ไม่มีรายการ "ต้องแก้เอง", exit 1 และไม่มีไฟล์เปลี่ยน
 จากนั้น **ลบไฟล์ที่ทดลองสร้าง** (`rm -r src/skilllane-monitoring`) และรายงานผลให้ผู้ใช้ ตัดสินใจเองว่าจะเก็บไว้ใน pluton-monorepo หรือไม่
 
 - [ ] **Step 4: Commit**
