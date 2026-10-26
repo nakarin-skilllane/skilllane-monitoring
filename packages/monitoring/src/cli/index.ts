@@ -1,9 +1,11 @@
 import { errorsCheck } from './errors-check'
 import { errorsInit } from './errors-init'
+import { uninstall } from './uninstall'
 
 const USAGE = `usage:
   skilllane-monitoring errors init  [--path src/skilllane-monitoring/errors.ts] [--min-repeat 5]
-  skilllane-monitoring errors check [--path src/skilllane-monitoring/errors.ts]`
+  skilllane-monitoring errors check [--path src/skilllane-monitoring/errors.ts]
+  skilllane-monitoring uninstall    [--path src/skilllane-monitoring/errors.ts] [--yes] [--force]`
 
 function flag(argv: string[], name: string): string | undefined {
   const i = argv.indexOf(name)
@@ -15,9 +17,18 @@ export function runCli(
   argv: string[],
   cwd: string,
   out: (line: string) => void = (l) => console.log(l),
-): number {
+): number | Promise<number> {
   const [group, command] = argv
   const path = flag(argv, '--path')
+  if (group === 'uninstall') {
+    return uninstall({
+      cwd,
+      path,
+      yes: argv.includes('--yes'),
+      force: argv.includes('--force'),
+      out,
+    })
+  }
   if (group === 'errors' && command === 'init') {
     const minRepeat = Number(flag(argv, '--min-repeat') ?? 5)
     return errorsInit({
