@@ -36,6 +36,7 @@ import { CaptureSpanProcessor } from '../capture/processor'
 import { setSpansExported } from '../capture/settings'
 import { FailedStepSpanProcessor } from '../integrations/failed-step'
 import { otelDiagLogger } from '../integrations/otel'
+import { startProjectCatalog } from '../errors/catalog-loader'
 import { getLogger } from '../logger'
 import { setRecordSink } from '../logger/sink'
 import {
@@ -338,6 +339,7 @@ export function registerTelemetry(options: TelemetryOptions = {}): Telemetry {
   }
   loadDotenv()
   const legacy = env('LOGGING_ENGINE') === 'legacy'
+  if (!legacy) startProjectCatalog()
   const selection = selectExportMode()
   const settings = exportSettings()
   const identity = serviceIdentity()
