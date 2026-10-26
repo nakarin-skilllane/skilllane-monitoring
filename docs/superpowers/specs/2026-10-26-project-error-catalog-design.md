@@ -1,0 +1,87 @@
+# ตาราง error ของโปรเจค (project error catalog)
+
+สถานะ: ตกลงแล้ว · 2026-10-26 · repo `skilllane-monitoring` (package `packages/monitoring`, เวอร์ชันถัดไป 0.3.0)
+
+## เป้าหมาย
+โปรเจคที่มี error code ของตัวเอง สอน logger ให้รู้จัก code เหล่านั้น (hint, คำอธิบาย, ใครต้องแก้, ระดับ) ได้จากไฟล์เดียว
+**โดยไม่ต้องแก้วิธี throw ที่มีอยู่** และถอด package ได้โดยลบโฟลเดอร์เดียว
+
+## สิ่งที่มีอยู่แล้ว (ไม่ต้องทำ)
+- `nestAdapter` อ่าน `errorCode` (string) จาก exception ของ Nest และจาก `getResponse().errorCode` → `error.code`
+- hint ที่ส่งมากับ error (`hint` / `hintDetail` บน error หรือใน options ของ logger) ชนะทุกอย่าง
+- `this.logger.error(msg, { code })` ใส่ `error.code` ได้
+
+## ไฟล์ในโปรเจค
+ตำแหน่งมาตรฐาน `src/skilllane-monitoring/errors.ts` ไม่มีใคร import และไฟล์ไม่ import อะไรจาก SDK
+
+```ts
+/* comment อธิบายกฎทั้งหมด (สร้างโดย init) */
+export default {
+  errors: {
+    codeOf: (err: any) => err.errorCode,   // ไม่ใส่ = ใช้ code จาก adapter ของ SDK
+    catalog: {
+      STUDENT_LEAVE_SCHOOL: { hint: 'Student left school', hintDetail: '…', category: 'input', level: 'warn' },
+      1701: { hint: 'Role title exists', hintDetail: '…', category: 'input' },
+      'ORA-00001': { hint: 'Duplicate exam code', hintDetail: '…' },
+      USER_NOT_FOUND: { messageMatch: /^User not found$/, hint: 'User not found', hintDetail: '…' },
+    },
+  },
+}
+```
+
+ช่องของแต่ละรายการ: `hint` (บังคับ), `hintDetail`, `category` (`bug|input|data|dependency|config`), `level` (`warn|error`), `dependency`, `messageMatch` (RegExp)
+key ของ `catalog` คือ code (string หรือตัวเลข เทียบเป็น string) รายการที่มี `messageMatch` ใช้ key เป็นชื่อ code ที่จะใส่ให้ error ที่ไม่มี code
+
+## การโหลด (ครั้งเดียวตอน `registerTelemetry`)
+ลำดับ ใช้ตัวแรกที่เจอ:
+1. `LOG_CONFIG_FILE` — path ของไฟล์ `.ts` ใน `src/` หรือ `.js` ที่ build แล้ว (สัมพัทธ์กับ cwd หรือเต็ม)
+   - `.ts`: ถ้า runtime โหลด `.ts` ได้ (ts-node, tsx) โหลดตรง ไม่ได้ก็แปลงเป็น `.js` แล้วลอง `<root>/dist/<path ใต้ src>` และ `<root>/dist/src/<path ใต้ src>` (`<root>` = โฟลเดอร์ของ `package.json` ที่ใกล้ไฟล์ที่รันที่สุด)
+2. `<โฟลเดอร์ของไฟล์ที่รัน>/skilllane-monitoring/errors.js`
+3. `<โฟลเดอร์ของไฟล์ที่รัน>/config/skilllane-monitoring.js`
+
+ไฟล์ที่รัน = `process.argv[1]` (ใช้ได้ทั้ง `--require skilllane-monitoring/register` และ `import` บรรทัดแรกของ `main.ts`)
+โหลดด้วย `require` (SDK และแอป Nest เป็น CommonJS) ไฟล์แบบ ES module โหลดไม่ได้ในรอบนี้: เขียน `failed to load` พร้อมเหตุผล
+เจอหลายที่: ใช้ตัวแรก เตือนว่ามีไฟล์ซ้ำ
+พิมพ์บรรทัดสรุปเสมอ (`app.log`, logger `skilllane-monitoring`):
+- info `custom error catalog: N codes from <path ที่ผู้ใช้เขียน> (<path ที่โหลดจริง>)`
+- info `custom error catalog: not found` (path ที่ลองหาอยู่ใน `reason`)
+- warn `custom error catalog: failed to load <path>` (เหตุผลอยู่ใน `reason`)
+- warn เพิ่มเมื่อมีรายการถูกปรับ: `custom error catalog: K entries adjusted` (รายการอยู่ใน `reason`) และเมื่อเจอไฟล์ซ้ำ
+`LOGGING_ENGINE=legacy` = ไม่โหลด
+
+## ลำดับหา code และ hint
+- **code**: `options.code` ของ logger → `codeOf(err)` (ค่าที่ไม่ใช่ string/number หรือ throw = ข้าม) → adapter ของ SDK
+- **hint**:
+  1. hint ที่ส่งมากับ error / options (เดิม)
+  2. ตารางของโปรเจค: code ตรง key (ไม่สน dependency) → `messageMatch` ตามลำดับในไฟล์
+  3. ตารางในตัว package (เดิม)
+  4. ไม่มี hint
+- รายการจากตารางของโปรเจคได้ `category`, `level` แบบเดียวกับตารางในตัว (`level: 'warn'` ยังกลับเป็น error เมื่อ request ตอบ 5xx ตามกฎเดิม)
+
+## ใส่ผิดกฎ (ตรวจตอนโหลด แอปไม่ล้ม เตือนรวม 1 บรรทัด)
+| ใส่ผิด | ผล |
+|---|---|
+| `hint` ว่าง / ไม่ใช่ string | ข้ามทั้งรายการ |
+| `hint` > 30 ตัว (> 40 เมื่อมี `dependency`) | ตัดเหลือ 30 (40) + `…` |
+| `hintDetail` > 200 ตัว | ตัดเหลือ 200 + `…` |
+| `category` / `level` / `dependency` ไม่อยู่ในรายการ | ไม่ใช้ช่องนั้น |
+| `messageMatch` ไม่ใช่ RegExp | ข้ามช่องนั้น |
+| `codeOf` ไม่ใช่ function | ไม่ใช้ |
+| code ไม่ใช่ `[A-Z0-9_.-]+` | ใช้ได้ เตือนเฉพาะใน `errors check` |
+| ไฟล์ export รูปแบบผิด (ไม่มี `errors.catalog`) | ตาราง 0 code + warn `entries adjusted` บอกรูปแบบที่ต้องการ |
+
+## คำสั่ง (bin `skilllane-monitoring`)
+- `errors init [--path src/skilllane-monitoring/errors.ts] [--min-repeat 5]`
+  - สร้างไฟล์พร้อม comment กฎ ไม่เขียนทับไฟล์ที่มี
+  - ร่างรายการจาก `src/`: string ที่กำหนดให้ `errorCode` (`errorCode = 'X'`, `errorCode: 'X'`) และข้อความ `throw new XxxException('…')` ที่ซ้ำ ≥ `--min-repeat` ที่ (เป็น `messageMatch`) hint ว่างไว้ให้ทีมเติม (รายการที่ hint ว่างถูกข้ามตอนโหลด จึงใช้งานได้ทันทีแม้ยังเติมไม่ครบ) ข้อความที่ซ้ำมี comment `// seen N times`
+  - พิมพ์วิธีถอด: ลบโฟลเดอร์ / ไฟล์นี้
+- `errors check [--path …]`
+  - โหลดไฟล์ (`.ts` แปลงด้วย `typescript` ของโปรเจค, `.js` ใช้ `require`) ตรวจกฎแบบเข้มงวด
+  - หา code ใน `src/` (`errorCode` และ `code: '…'` ใน `this.logger.*`) ที่ไม่มีในตาราง
+  - exit 1 เมื่อมีข้อผิดตามกฎ, 0 เมื่อมีแค่คำเตือน
+
+## นอกขอบเขต
+`error.fix` / `explain` จากตารางของโปรเจค · adapter ของโปรเจค · การลบไฟล์อัตโนมัติตอน uninstall (pnpm / npm ไม่รองรับ)
+
+## ทดสอบ (vitest)
+โหลดไฟล์ทั้ง 3 ตำแหน่ง + `LOG_CONFIG_FILE` (.ts → dist, dist/src, .js) · ไม่เจอ / โหลดล้ม · ลำดับ hint (dev hint > โปรเจค > ในตัว) · code ตัวเลข · `codeOf` throw · `messageMatch` · กฎใส่ผิดทุกข้อ · `level: warn` + 5xx · CLI `init` (ร่างรายการ, ไม่เขียนทับ) และ `check` (exit code, code ที่ไม่มีในตาราง)
