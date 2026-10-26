@@ -34,10 +34,10 @@ key ของ `catalog` คือ code (string หรือตัวเลข �
 
 ## การโหลด (ครั้งเดียวตอน `registerTelemetry`)
 ลำดับ ใช้ตัวแรกที่เจอ:
-1. `SKILLLANE_MONITORING_ERRORS_FILE_PATH` — path ของไฟล์ `.ts` ใน `src/` หรือ `.js` ที่ build แล้ว (สัมพัทธ์กับ cwd หรือเต็ม)
-   - `.ts`: ถ้า runtime โหลด `.ts` ได้ (ts-node, tsx) โหลดตรง ไม่ได้ก็แปลงเป็น `.js` แล้วลอง `<root>/dist/<path ใต้ src>` และ `<root>/dist/src/<path ใต้ src>` (`<root>` = โฟลเดอร์ของ `package.json` ที่ใกล้ไฟล์ที่รันที่สุด)
-2. `<โฟลเดอร์ของไฟล์ที่รัน>/skilllane-monitoring/errors.js`
-3. `<โฟลเดอร์ของไฟล์ที่รัน>/config/skilllane-monitoring.js`
+1. `SKILLLANE_MONITORING_ERRORS_FILE_PATH` — path ของไฟล์ `.ts` ใน `src/` หรือ `.js` ที่ build แล้ว · path สัมพัทธ์ resolve กับ `<root>` ก่อน แล้วค่อย cwd (`<root>` = โฟลเดอร์ของ `package.json` ที่ใกล้ไฟล์ที่รันที่สุด เผื่อสั่งรันจาก root ของ monorepo)
+   - `.ts`: ลอง `<root>/dist/<path ใต้ src>` และ `<root>/dist/src/<path ใต้ src>` ก่อน แล้วจึงไฟล์ `.ts` เอง (ts-node / tsx โหลดได้ runtime อื่นได้ `failed to load` พร้อมเหตุผล)
+2. `<โฟลเดอร์ของไฟล์ที่รัน>/skilllane-monitoring/errors.js` (และ `.ts` ถ้าไฟล์ที่รันเป็น `.ts` จะลอง `.ts` ก่อน)
+3. `<โฟลเดอร์ของไฟล์ที่รัน>/config/skilllane-monitoring.js` (เช่นเดียวกัน)
 
 ไฟล์ที่รัน = `process.argv[1]` (ใช้ได้ทั้ง `--require skilllane-monitoring/register` และ `import` บรรทัดแรกของ `main.ts`)
 โหลดด้วย `require` (SDK และแอป Nest เป็น CommonJS) ไฟล์แบบ ES module โหลดไม่ได้ในรอบนี้: เขียน `failed to load` พร้อมเหตุผล
@@ -57,6 +57,8 @@ key ของ `catalog` คือ code (string หรือตัวเลข �
   3. ตารางในตัว package (เดิม)
   4. ไม่มี hint
 - รายการจากตารางของโปรเจคได้ `category`, `level` แบบเดียวกับตารางในตัว (`level: 'warn'` ยังกลับเป็น error เมื่อ request ตอบ 5xx ตามกฎเดิม)
+- key ตรงกับตารางในตัว (เช่น `ORA-00001`): ทับ `hint` และช่องที่ใส่ (`hintDetail`, `category`, `level`) ส่วนที่ไม่ได้ใส่และ `explain` / `target` / `retryable` สืบจากตารางในตัว `error.fix` และ `error_target` จึงยังทำงาน
+- จับด้วย `messageMatch` แล้ว `error.code` = key เมื่อ error ไม่มี code **หรือ** code เป็นแบบที่ adapter สร้างจาก HTTP status (`HTTP_4xx` / `HTTP_5xx` ของ exception ของ Nest) code อื่นคงไว้
 
 ## ใส่ผิดกฎ (ตรวจตอนโหลด แอปไม่ล้ม เตือนรวม 1 บรรทัด)
 | ใส่ผิด | ผล |
@@ -82,11 +84,12 @@ key ของ `catalog` คือ code (string หรือตัวเลข �
   - หา code ใน `src/` (`errorCode` และ `code: '…'` ใน `this.logger.*`) ที่ไม่มีในตาราง
   - exit 1 เมื่อมีข้อผิดตามกฎ, 0 เมื่อมีแค่คำเตือน
 
+- bin คือ `dist/cli/bin.js` (`runCli` ใน `index.ts` ไม่มี side effect ตอน import)
 - `uninstall [--path …] [--yes] [--force]` ถอดทุกอย่างในคำสั่งเดียว
   1. หาไฟล์ตาราง (`--path` → `SKILLLANE_MONITORING_ERRORS_FILE_PATH` → ตำแหน่งมาตรฐาน) ลบไฟล์ และ `README.md` ข้างกันที่บรรทัดแรกเป็น marker ของ `init` (README ที่ทีมเขียนเองไม่ลบ) แล้วลบโฟลเดอร์เมื่อว่างแล้วเท่านั้น (ไม่ลบ `src/` และไม่ลบไฟล์อื่นของทีม)
   2. สแกน `.ts` / `.js` ใน `src/` (ไม่รวม `node_modules`, `dist`):
      บรรทัดที่เป็น import เปล่า `import 'skilllane-monitoring/register'` หรือ `require('skilllane-monitoring/register')` → ลบบรรทัด (เช่น `src/main.ts`, `src/instrumentation.ts`)
-     การอ้าง `skilllane-monitoring` แบบอื่น (`LoggingModule`, `AppError`, `registerTelemetry` …) → ไม่แก้ แสดงไฟล์:บรรทัด แล้วหยุด (exit 1) เว้นแต่ใส่ `--force`
+     `import` / `require` อื่นของ `skilllane-monitoring` (`LoggingModule`, `AppError`, `registerTelemetry` …) → ไม่แก้ แสดงไฟล์:บรรทัด แล้วหยุด (exit 1) เว้นแต่ใส่ `--force` · comment หรือ string ที่แค่มีชื่อ package ไม่นับ
   3. ไฟล์นอก `src/` ที่ root ของแอป (`Dockerfile*`, `package.json` ส่วน scripts, `.env*`, `docker-compose*`, `*.sh`) ที่มีคำว่า `skilllane-monitoring` (เช่น `NODE_OPTIONS`) → แสดงเป็นคำเตือน ไม่แก้
   4. แสดงแผนทั้งหมดแล้วถาม `Continue? (y/N)` ข้ามด้วย `--yes` ตอบอย่างอื่น = ไม่ทำอะไร exit 1
   5. ทำข้อ 1–2 แล้วรันคำสั่งถอดตาม lockfile ที่ใกล้ที่สุด (`pnpm-lock.yaml` → `pnpm remove`, `yarn.lock` → `yarn remove`, `package-lock.json` / ไม่มี → `npm uninstall`) ในโฟลเดอร์ของแอป exit code = ของคำสั่งนั้น

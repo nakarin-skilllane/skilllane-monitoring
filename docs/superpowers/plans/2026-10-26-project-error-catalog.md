@@ -27,11 +27,13 @@
 |---|---|
 | Create `src/errors/project-catalog.ts` | type ของ config, `normalizeCatalog` (ตรวจ + ตัด + issues), สถานะ `setProjectCatalog` / `getProjectCatalog`, `projectCodeOf` |
 | Create `src/errors/catalog-loader.ts` | `catalogCandidates`, `loadCatalogModule`, `startProjectCatalog` (โหลด + เขียนบรรทัดสรุป) |
-| Modify `src/errors/hints.ts` | index แยก builtin / project · `findPattern` ถาม project ก่อน |
+| Modify `src/errors/hints.ts` | index แยก builtin / project · `findPattern` ถาม project ก่อน · รายการของโปรเจคที่ key ตรงกับตารางในตัวสืบ `explain` / `target` / `retryable` มา · จับด้วย `messageMatch` แล้วทับ code แบบทั่วไป `HTTP_xxx` ด้วย key |
 | Modify `src/errors/error-serializer.ts` | `code` = `projectCodeOf(error) ?? extracted.code` |
+| Modify `src/logger/app-logger.ts` | ใช้ `resolved.code` เมื่อ `lookupHint` ส่งมา (แทนเงื่อนไข "เมื่อยังไม่มี code") |
 | Modify `src/errors/index.ts` | export โมดูลใหม่ |
 | Modify `src/otel/register.ts` | เรียก `startProjectCatalog` หลัง `loadDotenv()` เมื่อไม่ใช่ legacy |
-| Create `src/cli/index.ts` | bin: parse argv → `init` / `check` |
+| Create `src/cli/index.ts` | `runCli`: parse argv → `init` / `check` / `uninstall` (ไม่มี side effect ตอน import ให้ test import ได้) |
+| Create `src/cli/bin.ts` | ไฟล์ bin: shebang + เรียก `runCli` แล้วตั้ง `process.exitCode` |
 | Create `src/cli/scan.ts` | สแกน `src/` หา errorCode, ข้อความ throw ที่ซ้ำ, code ใน logger |
 | Create `src/cli/template.ts` | สร้างเนื้อหาไฟล์ `errors.ts` |
 | Create `src/cli/errors-init.ts`, `src/cli/errors-check.ts` | คำสั่งทั้งสอง (คืน exit code ไม่เรียก `process.exit` เอง) |
@@ -316,6 +318,7 @@ git commit -m "feat(errors): normalize an app's own error catalog"
 **Files:**
 - Modify: `src/errors/hints.ts` (ส่วน index และ `findPattern`)
 - Modify: `src/errors/error-serializer.ts:87-118` (`serializeError`)
+- Modify: `src/logger/app-logger.ts:388-390` (การใส่ `resolved.code`)
 - Modify: `src/errors/index.ts`
 - Test: `test/project-hints.test.ts`
 
@@ -327,7 +330,7 @@ git commit -m "feat(errors): normalize an app's own error catalog"
 
 ```ts
 // test/project-hints.test.ts
-import { BadRequestException, HttpException } from '@nestjs/common'
+import { BadRequestException, HttpException, NotFoundException } from '@nestjs/common'
 import { afterEach, describe, expect, it } from 'vitest'
 import { normalizeCatalog, setProjectCatalog } from '../src/errors/project-catalog'
 import { captureLogger, lastLine } from './helpers'
@@ -379,11 +382,23 @@ describe('project error catalog in log lines', () => {
     expect(lastLine(lines)).toMatchObject({ 'error.code': 'USER_NOT_FOUND', 'error.hint': 'User not found' })
   })
 
-  it('overrides a built-in hint for the same code', () => {
+  it('names a Nest exception matched by message with the key instead of HTTP_404', () => {
+    useCatalog({ errors: { catalog: { USER_NOT_FOUND: { messageMatch: /^User not found$/, hint: 'User not found' } } } })
+    const { logger, lines } = captureLogger()
+    logger.error('Request failed', new NotFoundException('User not found'))
+    expect(lastLine(lines)).toMatchObject({ 'error.code': 'USER_NOT_FOUND', 'error.hint': 'User not found' })
+  })
+
+  it('overrides a built-in hint for the same code and keeps its explain, category and level', () => {
     useCatalog({ errors: { catalog: { 'ORA-00001': { hint: 'Duplicate exam code' } } } })
     const { logger, lines } = captureLogger()
-    logger.error('Insert failed', Object.assign(new Error('ORA-00001: unique constraint (APP.UQ) violated'), { errorNum: 1 }))
-    expect(lastLine(lines)['error.hint']).toBe('Duplicate exam code')
+    logger.error('Insert failed', Object.assign(new Error('ORA-00001: unique constraint (PROD_RE.UQ_EXAM_CODE) violated'), { errorNum: 1 }))
+    const line = lastLine(lines)
+    expect(line['error.hint']).toBe('Duplicate exam code')
+    expect(line['error.hint_detail']).toContain('unique constraint')   // inherited from the built-in pattern
+    expect(line['labels.error_target']).toBe('UQ_EXAM_CODE')          // the built-in explain still runs
+    expect(line['labels.error_category']).toBe('data')
+    expect(line['log.level']).toBe('warn')
   })
 
   it('keeps the developer hint above the app table', () => {
@@ -407,12 +422,11 @@ describe('project error catalog in log lines', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm exec vitest run test/project-hints.test.ts`
-Expected: FAIL — `error.hint` เป็น `undefined` (ยังไม่ได้ต่อตารางของโปรเจค)
-ถ้า test "overrides a built-in hint" ให้ `error.code` ไม่ใช่ `ORA-00001` ให้ดูวิธีที่ `test/patterns-libraries.test.ts` สร้าง error ของ Oracle แล้วสร้างแบบเดียวกัน
+Expected: FAIL — `error.hint` เป็น `undefined` (ยังไม่ได้ต่อตารางของโปรเจค) · test `labels.error_target` ใช้ key แบบ flat (`'labels.error_target'`) ถ้า record ของ `captureLogger` เก็บเป็น `labels: { error_target }` ให้ดูรูปแบบจาก `test/explain.test.ts` (`line.labels.error_target`) แล้วใช้แบบนั้นทั้งไฟล์
 
 - [ ] **Step 3: Write minimal implementation**
 
-ใน `src/errors/hints.ts` แทนส่วน index เดิม (`const byKey = …` ถึงลูป `for (const pattern of ALL_PATTERNS)`) และ `findPattern` ด้วย:
+ใน `src/errors/hints.ts` แทนส่วน index เดิม (`const byKey = …` ถึงลูป `for (const pattern of ALL_PATTERNS)`) และ `findPattern` ทั้งฟังก์ชัน (ตรวจแล้ว: เงื่อนไขทั้งหมดของ `findPattern` เดิมอยู่ใน `findIn` ด้านล่างครบ) ด้วย:
 
 ```ts
 import { getProjectCatalog, type NormalizedCatalog } from './project-catalog'
@@ -421,6 +435,17 @@ interface PatternIndex {
   byKey: Map<string, ErrorPattern>
   byMessage: ErrorPattern[]
 }
+
+interface Match {
+  pattern: ErrorPattern
+  /** Matched by messageMatch, not by code. */
+  byMessage: boolean
+  /** From the app's own table. */
+  project: boolean
+}
+
+/** A code an adapter made up from the HTTP status: an app's message pattern may name it better. */
+const GENERIC_CODE = /^HTTP_\d{3}$/
 
 /** Built-in patterns are scoped by dependency; an app's code matches whatever the dependency. */
 function indexPatterns(patterns: readonly ErrorPattern[], scoped: boolean): PatternIndex {
@@ -433,6 +458,28 @@ function indexPatterns(patterns: readonly ErrorPattern[], scoped: boolean): Patt
 }
 
 const BUILTIN = indexPatterns(ALL_PATTERNS, true)
+/** First built-in pattern per key, whatever its dependency: what an app entry with the same key inherits from. */
+const BUILTIN_BY_KEY = new Map<string, ErrorPattern>()
+for (const pattern of ALL_PATTERNS) if (!BUILTIN_BY_KEY.has(pattern.key)) BUILTIN_BY_KEY.set(pattern.key, pattern)
+
+/**
+ * An app entry that overrides a built-in code replaces the words (hint, detail,
+ * category, level) but keeps what the built-in pattern knows about the error:
+ * its explain / target (error.fix, error_target) and retryable.
+ */
+function inherit(pattern: ErrorPattern): ErrorPattern {
+  const base = BUILTIN_BY_KEY.get(pattern.key)
+  if (!base) return pattern
+  return {
+    ...pattern,
+    hintDetail: pattern.hintDetail || base.hintDetail,
+    category: pattern.category ?? base.category,
+    level: pattern.level ?? base.level,
+    retryable: pattern.retryable ?? base.retryable,
+    target: pattern.target ?? base.target,
+    explain: pattern.explain ?? base.explain,
+  }
+}
 
 let projectIndex: { source: NormalizedCatalog; index: PatternIndex } | undefined
 
@@ -440,34 +487,68 @@ function projectPatterns(): PatternIndex | undefined {
   const catalog = getProjectCatalog()
   if (!catalog) return undefined
   if (projectIndex?.source !== catalog) {
-    projectIndex = { source: catalog, index: indexPatterns(catalog.patterns, false) }
+    projectIndex = { source: catalog, index: indexPatterns(catalog.patterns.map(inherit), false) }
   }
   return projectIndex.index
 }
 
-function findIn(index: PatternIndex, query: HintQuery): ErrorPattern | undefined {
+function findIn(index: PatternIndex, query: HintQuery): Omit<Match, 'project'> | undefined {
   const { code, dependency, message } = query
   if (code) {
     const scoped = dependency ? index.byKey.get(scopedKey(dependency, code)) : undefined
     const found = scoped ?? index.byKey.get(scopedKey(undefined, code))
-    if (found) return found
+    if (found) return { pattern: found, byMessage: false }
   }
   if (!message) return undefined
-  return index.byMessage.find(
+  const found = index.byMessage.find(
     (pattern) =>
       (!pattern.dependency || pattern.dependency === dependency) &&
       pattern.messageMatch!.test(message),
   )
+  return found ? { pattern: found, byMessage: true } : undefined
 }
 
 /** The app's table first, then the built-in one. */
-function findPattern(query: HintQuery): ErrorPattern | undefined {
+function findPattern(query: HintQuery): Match | undefined {
   const project = projectPatterns()
-  return (project && findIn(project, query)) ?? findIn(BUILTIN, query)
+  const own = project && findIn(project, query)
+  if (own) return { ...own, project: true }
+  const builtin = findIn(BUILTIN, query)
+  return builtin ? { ...builtin, project: false } : undefined
 }
 ```
 
-(ถ้า `findPattern` เดิมมีเงื่อนไขเพิ่มจากที่เห็นในบรรทัด 128–140 ให้ย้ายเงื่อนไขนั้นเข้า `findIn` ทั้งหมด ห้ามตัดทิ้ง)
+แล้วแก้ต้น `lookupHint` ให้ใช้ `Match` และตัดสินว่าจะส่ง `code` กลับเมื่อไหร่ (เดิม: เฉพาะเมื่อ error ไม่มี code):
+
+```ts
+export function lookupHint(query: HintQuery, vars: HintVars = {}): ResolvedHint | undefined {
+  const match = findPattern(query)
+  if (!match) return undefined
+  const { pattern } = match
+  const dependency = pattern.dependency ?? query.dependency
+  const explained = explain(pattern, query)
+  // The key names the error when it had no code, or when the app's message
+  // pattern knows it better than the status-made HTTP_4xx code.
+  const names = !query.code || (match.project && match.byMessage && GENERIC_CODE.test(query.code))
+  return {
+    hint: fill(pattern.hint, dependency, vars),
+    hintDetail: fill(pattern.hintDetail, dependency, vars),
+    code: names ? pattern.key : undefined,
+    level: pattern.level,
+    retryable: pattern.retryable,
+    key: pattern.key,
+    category: categoryOf(pattern),
+    target: explained?.target ?? targetOf(pattern, query.message),
+    fix: explained?.fix,
+  }
+}
+```
+
+ใน `src/logger/app-logger.ts` (ราวบรรทัด 388) `lookupHint` ส่ง `code` มาก็ต่อเมื่อควรใช้แทนของเดิม จึงเลิกเช็ค "ยังไม่มี code":
+
+```ts
+    if (resolved.code) record['error.code'] = resolved.code
+```
 
 ใน `src/errors/error-serializer.ts` เพิ่ม import และแก้ `code` ใน `serializeError`:
 
@@ -486,12 +567,12 @@ export * from './project-catalog'
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm exec vitest run test/project-hints.test.ts && pnpm exec vitest run`
-Expected: PASS ทั้งไฟล์ใหม่และ test เดิมทั้งหมด (`pnpm exec vitest run` ต้องเขียวทั้งชุด)
+Expected: PASS ทั้งไฟล์ใหม่และ test เดิมทั้งหมด (`pnpm exec vitest run` ต้องเขียวทั้งชุด) · `test/explain.test.ts` และ `test/app-logger.test.ts` เป็นตัวยืนยันว่าตารางในตัวยังทำงานเหมือนเดิม
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/errors/hints.ts src/errors/error-serializer.ts src/errors/index.ts test/project-hints.test.ts
+git add src/errors/hints.ts src/errors/error-serializer.ts src/logger/app-logger.ts src/errors/index.ts test/project-hints.test.ts
 git commit -m "feat(errors): look up an app's own catalog before the built-in table"
 ```
 
@@ -508,9 +589,9 @@ git commit -m "feat(errors): look up an app's own catalog before the built-in ta
 **Interfaces:**
 - Consumes: `normalizeCatalog`, `setProjectCatalog`, `NormalizedCatalog` (Task 1); `getLogger` จาก `src/logger`
 - Produces:
-  - `interface CandidateOptions { configFile?: string; entry?: string; cwd: string; tsLoadable?: boolean }`
+  - `interface CandidateOptions { configFile?: string; entry?: string; cwd: string }`
   - `interface Candidate { path: string; shown: string }` (`shown` = path ที่ผู้ใช้เขียน เช่น `.ts`)
-  - `function catalogCandidates(o: CandidateOptions): Candidate[]`
+  - `function catalogCandidates(o: CandidateOptions): Candidate[]` — path สัมพัทธ์ resolve กับ root ของแอป (โฟลเดอร์ `package.json` ที่ใกล้ไฟล์ที่รัน) ก่อน แล้ว cwd · ไฟล์ `.ts` เองเป็นตัวเลือกสุดท้ายเสมอ (ts-node / tsx โหลดได้ runtime อื่นได้ `failed to load` พร้อมเหตุผล)
   - `type LoadOutcome = { status: 'not-found'; looked: string[] } | { status: 'failed'; path: string; reason: string } | { status: 'loaded'; path: string; shown: string; catalog: NormalizedCatalog; duplicates: string[] }`
   - `function loadProjectCatalog(o: CandidateOptions): LoadOutcome`
   - `function startProjectCatalog(o?: Partial<CandidateOptions>): LoadOutcome` (ตั้งค่า + เขียนบรรทัดสรุป)
@@ -545,28 +626,43 @@ function put(root: string, rel: string, body = CATALOG_JS): void {
 afterEach(() => setProjectCatalog(undefined))
 
 describe('catalogCandidates', () => {
-  it('maps a src .ts path to dist and dist/src', () => {
+  it('maps a src .ts path to dist and dist/src, then the .ts itself', () => {
     const root = app()
     const found = catalogCandidates({ configFile: 'src/common/config/errors.ts', entry: join(root, 'dist/main.js'), cwd: root })
     expect(found.map((c) => c.path)).toEqual([
       join(root, 'dist/common/config/errors.js'),
       join(root, 'dist/src/common/config/errors.js'),
+      join(root, 'src/common/config/errors.ts'),
     ])
     expect(found[0].shown).toBe('src/common/config/errors.ts')
   })
 
-  it('tries the .ts file first when the runtime can load it', () => {
-    const root = app()
-    const found = catalogCandidates({ configFile: 'src/x.ts', entry: join(root, 'dist/main.js'), cwd: root, tsLoadable: true })
-    expect(found[0].path).toBe(join(root, 'src/x.ts'))
+  it('resolves a relative path against the app, not the folder the command ran in', () => {
+    // pnpm monorepo: `node packages/app/dist/main.js` from the repo root
+    const repo = mkdtempSync(join(tmpdir(), 'slm-mono-'))
+    writeFileSync(join(repo, 'package.json'), '{"name":"repo"}')
+    const appRoot = join(repo, 'packages/app')
+    mkdirSync(join(appRoot, 'dist'), { recursive: true })
+    writeFileSync(join(appRoot, 'package.json'), '{"name":"app"}')
+    writeFileSync(join(appRoot, 'dist/main.js'), '')
+    const found = catalogCandidates({ configFile: 'src/x.ts', entry: 'packages/app/dist/main.js', cwd: repo })
+    expect(found[0].path).toBe(join(appRoot, 'dist/x.js'))
+    expect(found.map((c) => c.path)).toContain(join(repo, 'src/x.ts'))   // the working-directory reading, last resort
   })
 
-  it('uses the two standard places next to the entry file', () => {
+  it('uses the two standard places next to the entry file, .js then .ts', () => {
     const root = app()
     expect(catalogCandidates({ entry: join(root, 'dist/main.js'), cwd: root }).map((c) => c.path)).toEqual([
       join(root, 'dist/skilllane-monitoring/errors.js'),
       join(root, 'dist/config/skilllane-monitoring.js'),
+      join(root, 'dist/skilllane-monitoring/errors.ts'),
+      join(root, 'dist/config/skilllane-monitoring.ts'),
     ])
+  })
+
+  it('looks for .ts first beside a .ts entry (ts-node src/main.ts)', () => {
+    const root = app()
+    expect(catalogCandidates({ entry: join(root, 'src/main.ts'), cwd: root })[0].path).toBe(join(root, 'src/skilllane-monitoring/errors.ts'))
   })
 })
 
@@ -597,7 +693,8 @@ describe('loadProjectCatalog', () => {
   it('says where it looked when nothing is there', () => {
     const root = app()
     const out = loadProjectCatalog({ entry: join(root, 'dist/main.js'), cwd: root })
-    expect(out).toEqual({ status: 'not-found', looked: [join(root, 'dist/skilllane-monitoring/errors.js'), join(root, 'dist/config/skilllane-monitoring.js')] })
+    expect(out).toMatchObject({ status: 'not-found' })
+    if (out.status === 'not-found') expect(out.looked[0]).toBe(join(root, 'dist/skilllane-monitoring/errors.js'))
   })
 
   it('fails without throwing when the file throws', () => {
@@ -660,8 +757,6 @@ export interface CandidateOptions {
   /** The script that started the app (process.argv[1]). */
   entry?: string
   cwd: string
-  /** The runtime can require .ts (ts-node, tsx). */
-  tsLoadable?: boolean
 }
 
 export interface Candidate {
@@ -686,26 +781,41 @@ function appRoot(from: string, fallback: string): string {
   }
 }
 
+function unique(list: Candidate[]): Candidate[] {
+  const seen = new Set<string>()
+  return list.filter((c) => !seen.has(c.path) && seen.add(c.path))
+}
+
 export function catalogCandidates(o: CandidateOptions): Candidate[] {
   const entryDir = o.entry ? dirname(resolve(o.cwd, o.entry)) : o.cwd
+  const root = appRoot(entryDir, o.cwd)
   if (o.configFile) {
     const shown = o.configFile
-    const full = isAbsolute(shown) ? shown : resolve(o.cwd, shown)
-    if (!full.endsWith('.ts')) return [{ path: full, shown }]
-    const root = appRoot(entryDir, o.cwd)
-    const underRoot = relative(root, full)
-    const underSrc = underRoot.startsWith(`src${sep}`) ? underRoot.slice(4) : underRoot
-    const built = underSrc.replace(/\.ts$/, '.js')
+    // Relative to the app (its package.json) first, then to the working directory: in a
+    // monorepo the app is started from the repo root, but its paths are written from the app.
+    const bases = isAbsolute(shown) ? [shown] : [resolve(root, shown), resolve(o.cwd, shown)]
+    if (!shown.endsWith('.ts')) return unique(bases.map((path) => ({ path, shown })))
     const list: Candidate[] = []
-    if (o.tsLoadable) list.push({ path: full, shown })
-    list.push({ path: join(root, 'dist', built), shown }, { path: join(root, 'dist', 'src', built), shown })
-    return list
+    for (const full of bases) {
+      const underRoot = relative(root, full)
+      if (underRoot.startsWith('..')) continue
+      const underSrc = underRoot.startsWith(`src${sep}`) ? underRoot.slice(4) : underRoot
+      const built = underSrc.replace(/\.ts$/, '.js')
+      list.push({ path: join(root, 'dist', built), shown }, { path: join(root, 'dist', 'src', built), shown })
+    }
+    // The .ts itself last: ts-node / tsx load it; elsewhere `failed to load` says why.
+    for (const full of bases) list.push({ path: full, shown })
+    return unique(list)
   }
-  const ext = o.tsLoadable && o.entry?.endsWith('.ts') ? '.ts' : '.js'
-  return [
-    { path: join(entryDir, 'skilllane-monitoring', `errors${ext}`), shown: join(entryDir, 'skilllane-monitoring', `errors${ext}`) },
-    { path: join(entryDir, 'config', `skilllane-monitoring${ext}`), shown: join(entryDir, 'config', `skilllane-monitoring${ext}`) },
-  ]
+  // Beside the entry file; a .ts entry (ts-node src/main.ts) finds the .ts first.
+  const exts = o.entry?.endsWith('.ts') ? ['.ts', '.js'] : ['.js', '.ts']
+  const list: Candidate[] = []
+  for (const ext of exts) {
+    for (const path of [join(entryDir, 'skilllane-monitoring', `errors${ext}`), join(entryDir, 'config', `skilllane-monitoring${ext}`)]) {
+      list.push({ path, shown: path })
+    }
+  }
+  return list
 }
 
 export function loadProjectCatalog(o: CandidateOptions): LoadOutcome {
@@ -739,7 +849,6 @@ export function startProjectCatalog(options: Partial<CandidateOptions> = {}): Lo
     configFile: options.configFile ?? (process.env.SKILLLANE_MONITORING_ERRORS_FILE_PATH?.trim() || undefined),
     entry: options.entry ?? process.argv[1],
     cwd: options.cwd ?? process.cwd(),
-    tsLoadable: options.tsLoadable ?? Boolean(require.extensions?.['.ts']),
   }
   const outcome = loadProjectCatalog(o)
   const log = (level: 'info' | 'warn', message: string, reason?: string) =>
@@ -784,13 +893,12 @@ import { startProjectCatalog } from '../errors/catalog-loader'
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm exec vitest run test/catalog-loader.test.ts && pnpm exec vitest run`
-Expected: PASS ทั้งหมด · test ของ register เดิม (`register-http.test.ts`, `register-otlp.test.ts`) ต้องยังผ่าน (ไม่มีไฟล์ catalog = บรรทัด info เพิ่ม 1 บรรทัด ถ้า test ใดนับจำนวนบรรทัด ให้แก้ test นั้นให้ข้ามบรรทัดที่ message ขึ้นต้นด้วย `custom error catalog:`)
+Expected: PASS ทั้งหมด · test ของ register เดิม (`register-http.test.ts`, `register-otlp.test.ts`) ผ่านโดยไม่ต้องแก้: บรรทัด `custom error catalog: not found` ถูกเขียนตอน `registerTelemetry()` ซึ่งเกิด**ก่อน** `captureLogger()` ใน test เหล่านั้น จึงไม่ถูกนับใน `toHaveLength(1)` (ตรวจแล้ว) ถ้าเห็นบรรทัดนี้บน stdout ระหว่างรัน test เป็นเรื่องปกติ
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/errors/catalog-loader.ts src/errors/index.ts src/otel/register.ts test/catalog-loader.test.ts
-# รวมไฟล์ test ของ register ถ้าต้องแก้ใน Step 4
 git commit -m "feat(errors): load the app's catalog at start and report it"
 ```
 
@@ -1148,7 +1256,7 @@ git commit -m "feat(cli): errors init drafts the app's catalog from its source"
 ### Task 5: CLI `errors check` + bin
 
 **Files:**
-- Create: `src/cli/errors-check.ts`, `src/cli/index.ts`
+- Create: `src/cli/errors-check.ts`, `src/cli/index.ts`, `src/cli/bin.ts`
 - Modify: `package.json` (`bin`, `version`)
 - Test: `test/cli-errors.test.ts` (เพิ่ม describe `errors check` และ `cli`)
 
@@ -1281,10 +1389,9 @@ export function errorsCheck(o: { cwd: string; path?: string; out?: (line: string
 }
 ```
 
-ไฟล์ `src/cli/index.ts` (บรรทัดแรกต้องเป็น shebang ห้ามมีอะไรก่อน):
+ไฟล์ `src/cli/index.ts` (ไม่มี side effect ตอน import: test import ได้ และ vitest/vite-node ไม่มี `module` แบบ CommonJS ให้เช็ค `require.main`):
 
 ```ts
-#!/usr/bin/env node
 import { errorsCheck } from './errors-check'
 import { errorsInit } from './errors-init'
 
@@ -1308,16 +1415,23 @@ export function runCli(argv: string[], cwd: string, out: (line: string) => void 
   out(USAGE)
   return 64
 }
+```
 
-if (require.main === module) {
-  process.exitCode = runCli(process.argv.slice(2), process.cwd())
-}
+ไฟล์ `src/cli/bin.ts` (บรรทัดแรกต้องเป็น shebang ห้ามมีอะไรก่อน `tsc` คงบรรทัดนี้ไว้ใน output):
+
+```ts
+#!/usr/bin/env node
+import { runCli } from './index'
+
+void Promise.resolve(runCli(process.argv.slice(2), process.cwd())).then((code) => {
+  process.exitCode = code
+})
 ```
 
 ใน `package.json` เพิ่ม (หลัง `"files"`) และเปลี่ยนเวอร์ชัน:
 
 ```json
-  "bin": { "skilllane-monitoring": "dist/cli/index.js" },
+  "bin": { "skilllane-monitoring": "dist/cli/bin.js" },
 ```
 
 ```json
@@ -1326,13 +1440,13 @@ if (require.main === module) {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run test/cli-errors.test.ts && pnpm run build && node dist/cli/index.js nope; echo "exit=$?" && head -1 dist/cli/index.js`
-Expected: test PASS · คำสั่งพิมพ์ usage และ `exit=64` · บรรทัดแรกของ `dist/cli/index.js` คือ `#!/usr/bin/env node`
+Run: `pnpm exec vitest run test/cli-errors.test.ts && pnpm run build && node dist/cli/bin.js nope; echo "exit=$?" && head -1 dist/cli/bin.js`
+Expected: test PASS · คำสั่งพิมพ์ usage และ `exit=64` · บรรทัดแรกของ `dist/cli/bin.js` คือ `#!/usr/bin/env node`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cli/errors-check.ts src/cli/index.ts package.json test/cli-errors.test.ts
+git add src/cli/errors-check.ts src/cli/index.ts src/cli/bin.ts package.json test/cli-errors.test.ts
 git commit -m "feat(cli): errors check and the skilllane-monitoring bin"
 ```
 
@@ -1342,7 +1456,7 @@ git commit -m "feat(cli): errors check and the skilllane-monitoring bin"
 
 **Files:**
 - Create: `src/cli/uninstall.ts`
-- Modify: `src/cli/index.ts` (route `uninstall`, `runCli` คืน `number | Promise<number>`)
+- Modify: `src/cli/index.ts` (route `uninstall`, `runCli` คืน `number | Promise<number>`; `bin.ts` รองรับ Promise อยู่แล้ว)
 - Test: `test/cli-uninstall.test.ts`
 
 **Interfaces:**
@@ -1411,10 +1525,15 @@ describe('planUninstall', () => {
     expect(plan.removeCommand).toEqual(['npm', 'uninstall', 'skilllane-monitoring'])
   })
 
-  it('treats other imports as blockers', () => {
-    const root = project({ 'src/app.module.ts': `import { LoggingModule } from 'skilllane-monitoring'\n` })
+  it('treats other imports as blockers, but not plain mentions', () => {
+    const root = project({
+      'src/app.module.ts': `import { LoggingModule } from 'skilllane-monitoring'\n`,
+      'src/jobs.ts': `const { tracked } = require('skilllane-monitoring')\n`,
+      'src/notes.ts': `// see skilllane-monitoring for the format\nconst name = 'skilllane-monitoring'\n`,
+    })
     expect(planUninstall({ cwd: root }).blockers).toEqual([
       { file: 'src/app.module.ts', line: 1, text: `import { LoggingModule } from 'skilllane-monitoring'` },
+      { file: 'src/jobs.ts', line: 1, text: `const { tracked } = require('skilllane-monitoring')` },
     ])
   })
 })
@@ -1495,7 +1614,8 @@ export interface UninstallPlan {
 
 const PACKAGE = 'skilllane-monitoring'
 const BARE_REGISTER = /^\s*(?:import\s+['"]skilllane-monitoring\/register['"]|require\(\s*['"]skilllane-monitoring\/register['"]\s*\))\s*;?\s*$/
-const ANY_USE = /['"]skilllane-monitoring(?:\/[\w-]+)?['"]/
+/** An import or require of the package (not a comment or a string that merely names it). */
+const ANY_USE = /(?:\bfrom\s+|\bimport\s+|\brequire\(\s*)['"]skilllane-monitoring(?:\/[\w-]+)?['"]/
 const OUTSIDE_FILE = /^(Dockerfile.*|package\.json|\.env.*|docker-compose.*\.ya?ml|.*\.sh)$/
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage'])
 
@@ -1636,13 +1756,9 @@ export function runCli(argv: string[], cwd: string, out: (line: string) => void 
   }
   // …errors init / check เดิม…
 }
-
-if (require.main === module) {
-  void Promise.resolve(runCli(process.argv.slice(2), process.cwd())).then((code) => {
-    process.exitCode = code
-  })
-}
 ```
+
+(`src/cli/bin.ts` จาก Task 5 ห่อผลด้วย `Promise.resolve` อยู่แล้ว ไม่ต้องแก้)
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1674,11 +1790,11 @@ Expected: ไม่มี error ทุกคำสั่ง
 
 ```bash
 cd ../../../pluton-monorepo/packages/school-core-api
-node ../../../skilllane-monitoring/packages/monitoring/dist/cli/index.js errors init --min-repeat 10
-node ../../../skilllane-monitoring/packages/monitoring/dist/cli/index.js errors check; echo "exit=$?"
+node ../../../skilllane-monitoring/packages/monitoring/dist/cli/bin.js errors init --min-repeat 10
+node ../../../skilllane-monitoring/packages/monitoring/dist/cli/bin.js errors check; echo "exit=$?"
 git status --short src/skilllane-monitoring && git diff --stat
 # ดูแผนของ uninstall โดยไม่ทำจริง: ตอบ N
-printf 'n\n' | node ../../../skilllane-monitoring/packages/monitoring/dist/cli/index.js uninstall; echo "exit=$?"
+printf 'n\n' | node ../../../skilllane-monitoring/packages/monitoring/dist/cli/bin.js uninstall; echo "exit=$?"
 ```
 Expected: สร้าง `src/skilllane-monitoring/errors.ts` และ `README.md` (อ่านแล้วต้องเข้าใจโดยไม่ต้องเปิดคู่มืออื่น) · ไฟล์ตารางมี `errorCode` ของคลาสลูก `BaseException` (ราว 26 code) และข้อความซ้ำ ≥ 10 ที่ (`User not found`, `Invalid token`, `User is not a student`, `Token expired`, `School not found`, `Exam room not found`, `School context is required`) · `check` exit 1 (hint ยังว่าง) และรายการ error ว่า `hint is required` · `git diff --stat` ไม่มีไฟล์อื่นเปลี่ยน
 `uninstall` ที่ตอบ N ต้องแสดง: ลบ `src/skilllane-monitoring/errors.ts` + โฟลเดอร์, ลบบรรทัด register ใน `src/instrumentation.ts:2` (และ `src/main.ts:2` ถ้ายังมี), ไม่มีรายการ "ต้องแก้เอง", exit 1 และไม่มีไฟล์เปลี่ยน
