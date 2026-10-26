@@ -385,9 +385,8 @@ export class AppLogger implements LoggerService {
     record['error.hint'] = resolved.hint
     record['error.hint_detail'] = resolved.hintDetail
     record['error.fix'] = resolved.fix
-    if (resolved.code && record['error.code'] === undefined) {
-      record['error.code'] = resolved.code
-    }
+    // lookupHint names the error only when its key should replace what is there.
+    if (resolved.code) record['error.code'] = resolved.code
     // `TypeError [TypeError]` says nothing; the matched pattern names it.
     if (record['error.code'] === record['error.type']) {
       record['error.code'] =

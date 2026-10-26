@@ -1,6 +1,7 @@
 import type { DependencyType } from '../types'
 import { type AdapterResult, ERROR_ADAPTERS } from './adapters'
 import { type ErrorOrigin, originOf } from './origin'
+import { projectCodeOf } from './project-catalog'
 import { usecaseOf } from '../logger/usecase'
 
 const MAX_CAUSE_DEPTH = 3
@@ -95,7 +96,7 @@ export function serializeError(error: unknown): SerializedError {
     return {
       type: typeOf(error),
       message: messageOf(error),
-      code: extracted.code,
+      code: projectCodeOf(error) ?? extracted.code,
       stack,
       origin: originOf(stack),
       usecase: usecaseOf(error),
