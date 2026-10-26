@@ -1,3 +1,4 @@
+import { types } from 'util'
 import type { DependencyType } from '../types'
 import type { ErrorCategory, ErrorPattern } from './patterns/types'
 
@@ -134,7 +135,8 @@ export function normalizeCatalog(raw: unknown): NormalizedCatalog {
       }
     }
     if (entry.messageMatch !== undefined) {
-      if (entry.messageMatch instanceof RegExp) {
+      // util.types: a RegExp made in another realm (errors check runs the file in a vm) still counts
+      if (types.isRegExp(entry.messageMatch)) {
         pattern.messageMatch = entry.messageMatch
       } else {
         problem('messageMatch is not a RegExp; ignored')

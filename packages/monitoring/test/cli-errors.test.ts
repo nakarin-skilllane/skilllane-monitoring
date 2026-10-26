@@ -153,6 +153,17 @@ describe('errors check', () => {
     )
   })
 
+  it('accepts a RegExp made by the transpiled file (another realm)', () => {
+    const root = project({
+      'src/skilllane-monitoring/errors.ts': `export default { errors: { catalog: { USER_NOT_FOUND: { messageMatch: /^User not found$/, hint: 'User not found' } } } }`,
+    })
+    linkTypescript(root)
+    const out: string[] = []
+    expect(errorsCheck({ cwd: root, out: (l) => out.push(l) })).toBe(0)
+    expect(out.join('\n')).not.toContain('messageMatch')
+    expect(out.join('\n')).toContain('1 codes, 0 errors')
+  })
+
   it('fails on rule errors', () => {
     const root = project({
       'src/skilllane-monitoring/errors.ts': `export default { errors: { catalog: { E1: { hint: '${'x'.repeat(31)}' } } } }`,
