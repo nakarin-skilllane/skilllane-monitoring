@@ -285,8 +285,8 @@ engine uses for other senders (SPEC.md §3 in the engine repository):
   (`redis://:[REDACTED]@host`), any `name=value`, `"name": "value"` or
   `name: "value"` pair whose name the key rule matches (`confirmPassword=…`,
   `"newPassword":"…"`, a quoted value whole), a string that is itself JSON
-  (masked as JSON: `{"meta": "{\"newPassword\": …}"}`), email, Thai national
-  ID with its checksum; and a 13-digit number that is a valid Thai national ID;
+  (masked as JSON: `{"meta": "{\"newPassword\": …}"}`), Thai national ID
+  with its checksum; and a 13-digit number that is a valid Thai national ID;
 - JSON that is not valid JSON (a UTF-8 BOM, UTF-16, single quotes, comments,
   NDJSON) or is cut at the cap goes through a tolerant scan; where the scan
   cannot follow the structure, every sensitive `"name": value` pair is masked
@@ -317,9 +317,9 @@ engine uses for other senders (SPEC.md §3 in the engine repository):
   key (`logger.log('x', { newPassword })` → label `newPassword:
   [REDACTED]`).
 
-Phone numbers and other personal data beyond email and Thai national ID are
-not masked (not in the agreed list; SPEC.md §3 in the engine repository says
-how to add them).
+Emails, phone numbers and other personal data beyond the Thai national ID
+are not masked (not in the agreed list; emails were masked up to mask
+version 2). SPEC.md §3 in the engine repository says how to add them.
 
 Raw bind values other instrumentations write (oracledb
 `enhancedDatabaseReporting` → `db.operation.parameter.<i>`, semconv
@@ -372,33 +372,40 @@ writes itself stays).
 development. Production must stay JSON. The JSON fields do not change.
 
 ```
-<time> <LVL> <service/role>  <title>  <key=value …> duration=…
+<time> <LVL> <service/role>  <title>
+    <method path status source job id attempt>
+    <file target reason …> duration=…
     error detail: <what to do>
     actual error: <the error>
     trace id:     <full trace id>  user id: <user id>
 ```
 
 ```
-14:02:11.204 INF school-core-api/api        request completed           method=POST path=/orders status=201 duration=84ms
+14:02:11.204 INF school-core-api/api  request completed
+    method=POST path=/orders status=201 duration=84ms
     trace id:     4bf92f3577b34da6a3ce929d0e0e4736  user id: u_1029
 
-14:03:40.517 ERR school-core-api/api        read from undefined value   method=POST path=/orders/:id/discount file=src/orders/apply-discount.handler.ts duration=31ms
+14:03:40.517 ERR school-core-api/api  read from undefined value
+    method=POST path=/orders/:id/discount
+    file=src/orders/apply-discount.handler.ts duration=31ms
     error detail: the object holding .percent was undefined; …
     actual error: TypeError: Cannot read properties of undefined (reading 'percent')
     trace id:     a3ce929d0e0e47364bf92f3577b34da6  user id: u_2201
 
-14:05:20.100 WRN school-core-api/api        redis "cache" still down    target=10.0.3.21:6379 retry=9 duration=30.0s
-14:05:35.300 INF school-core-api/api        redis "cache" is back       target=10.0.3.21:6379 duration=45.2s
+14:05:20.100 WRN school-core-api/api  redis "cache" still down
+    target=10.0.3.21:6379 retry=9 duration=30.0s
+
+14:05:35.300 INF school-core-api/api  redis "cache" is back
+    target=10.0.3.21:6379 duration=45.2s
 ```
 
-- **First line**: local `HH:mm:ss.SSS`, `DBG/INF/WRN/ERR/FTL`, `service.name`
-  (padded to the longest role), then the title — `error.hint` when there is one,
-  else the event's short title (`EVENT_CATALOG[code].title`) or the message,
-  first letter lower-cased.
-- **key=value**, only those with a value, in this order:
-  `method path status` · `source job id attempt` · `file` · `target` ·
-  `reason dlq affects retry port unfinished requests jobs` · `duration`.
-  `path` is `http.route` (no ids), else `url.path`. `source` is `event.module`.
+- **First line**: local `HH:mm:ss.SSS`, `DBG/INF/WRN/ERR/FTL`, `service.name`,
+  then the title — `error.hint` when there is one, else the event's short
+  title (`EVENT_CATALOG[code].title`) or the message, first letter lower-cased.
+- **key=value lines** under it, only those with a value: what ran
+  (`method path status source job id attempt`), then where
+  (`file target reason dlq affects retry port`); `duration` ends the last
+  line. `path` is `http.route` (no ids), else `url.path`. `source` is `event.module`.
   `job` is the topic/queue for Kafka/RabbitMQ, the job name otherwise.
   `target` is `labels.error_target`, else the dependency `host:port`, else
   `url.domain`. `duration` is `duration_ms`; on a line inside a request/job

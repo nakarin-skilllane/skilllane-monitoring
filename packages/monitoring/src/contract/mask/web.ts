@@ -52,7 +52,7 @@ export function maskQuery(query: string): string {
 }
 
 /**
- * A URL or path: userinfo, the path (`;jsessionid=`, an email) by the value
+ * A URL or path: userinfo, the path (`;jsessionid=`, a JWT) by the value
  * rule, the query by maskQuery, a fragment with pairs (`#access_token=`) too.
  */
 export function maskUrl(url: string): string {

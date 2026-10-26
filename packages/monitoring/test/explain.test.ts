@@ -235,9 +235,9 @@ describe('pretty', () => {
         'ORA-12899: value too large for column "PROD_RE"."question_bank"."title" (actual: 312, maximum: 255)',
       ),
     )
-    const [first, second] = formatPretty(line).split('\n')
-    expect(first).toContain('target=QuestionBankEntity.title')
-    expect(second).toBe(
+    const [, where, detail] = formatPretty(line).split('\n')
+    expect(where).toContain('target=QuestionBankEntity.title')
+    expect(detail).toBe(
       '    error detail: QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.',
     )
   })

@@ -68,8 +68,11 @@ describe('where an error happened', () => {
     expect(line['error.location']).toBeUndefined()
 
     const text = formatPretty(line)
-    expect(text.split('\n')[0]).toContain(
-      'read from undefined value   method=GET path=/question-bank/my file=src/domain/question-bank/get-my-questions.handler.ts target=id',
+    const [first, what, where] = text.split('\n')
+    expect(first).toMatch(/ read from undefined value$/)
+    expect(what).toBe('    method=GET path=/question-bank/my')
+    expect(where).toMatch(
+      /^ {4}file=src\/domain\/question-bank\/get-my-questions\.handler\.ts target=id duration=\d+ms$/,
     )
     expect(text).not.toMatch(/\.ts:\d/)
   })
