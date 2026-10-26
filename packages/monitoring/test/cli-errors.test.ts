@@ -8,7 +8,10 @@ import {
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { describe, expect, it } from 'vitest'
+import { symlinkSync } from 'fs'
+import { errorsCheck } from '../src/cli/errors-check'
 import { errorsInit } from '../src/cli/errors-init'
+import { runCli } from '../src/cli/index'
 import { scanSource } from '../src/cli/scan'
 
 function project(files: Record<string, string>): string {
@@ -120,5 +123,70 @@ describe('errors init', () => {
     expect(out).toContain(
       'add to .env: SKILLLANE_MONITORING_ERRORS_FILE_PATH=src/common/config/monitoring-errors.ts',
     )
+  })
+})
+
+function linkTypescript(root: string): void {
+  // the project under test needs its own typescript, like a real app (tests run from packages/monitoring)
+  mkdirSync(join(root, 'node_modules'), { recursive: true })
+  symlinkSync(
+    join(process.cwd(), 'node_modules/typescript'),
+    join(root, 'node_modules/typescript'),
+    'dir',
+  )
+}
+
+describe('errors check', () => {
+  it('passes a valid catalog and warns about codes the source uses but the catalog lacks', () => {
+    const root = project({
+      ...SOURCES,
+      'src/skilllane-monitoring/errors.ts': `export default { errors: { catalog: { STUDENT_LEAVE_SCHOOL: { hint: 'Student left school' } } } }`,
+    })
+    linkTypescript(root)
+    const out: string[] = []
+    expect(errorsCheck({ cwd: root, out: (l) => out.push(l) })).toBe(0)
+    expect(out.join('\n')).toContain(
+      'warning EXAM_SHARE_REQUIRES_QUESTION_CASCADE: used in src/ but not in the catalog',
+    )
+    expect(out.join('\n')).toContain(
+      'warning E1001: used in src/ but not in the catalog',
+    )
+  })
+
+  it('fails on rule errors', () => {
+    const root = project({
+      'src/skilllane-monitoring/errors.ts': `export default { errors: { catalog: { E1: { hint: '${'x'.repeat(31)}' } } } }`,
+    })
+    linkTypescript(root)
+    const out: string[] = []
+    expect(errorsCheck({ cwd: root, out: (l) => out.push(l) })).toBe(1)
+    expect(out.join('\n')).toContain(
+      'error E1: hint is longer than 30 characters; cut',
+    )
+  })
+
+  it('fails when the file is missing', () => {
+    const root = project({})
+    expect(errorsCheck({ cwd: root, out: () => {} })).toBe(1)
+  })
+})
+
+describe('cli', () => {
+  it('routes errors init / check and rejects unknown commands', () => {
+    const root = project({})
+    expect(runCli(['errors', 'init'], root, () => {})).toBe(0)
+    expect(runCli(['nope'], root, () => {})).toBe(64)
+  })
+
+  it('reads --path and --min-repeat', () => {
+    const root = project({})
+    expect(
+      runCli(
+        ['errors', 'init', '--path', 'src/x/errors.ts', '--min-repeat', '2'],
+        root,
+        () => {},
+      ),
+    ).toBe(0)
+    expect(existsSync(join(root, 'src/x/errors.ts'))).toBe(true)
   })
 })
