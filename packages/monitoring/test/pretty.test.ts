@@ -193,19 +193,22 @@ describe('pretty format', () => {
 
       14:02:11.204 INF school-core-api/api  request completed
           method=POST path=/orders status=201 duration=84ms
-          trace id:     4bf92f3577b34da6a3ce929d0e0e4736  user id: u_1029
+          user id:      u_1029
+          trace id:     4bf92f3577b34da6a3ce929d0e0e4736
 
       14:02:15.880 WRN school-core-api/api  invalid request body
           method=POST path=/orders status=400 duration=6ms
           error detail: quantity must be ≥ 1; shippingAddress.zip is required
-          trace id:     5ca13e9b0a8d4f21b6e7c3d2a1f09e88  user id: u_1029
+          user id:      u_1029
+          trace id:     5ca13e9b0a8d4f21b6e7c3d2a1f09e88
 
       14:03:40.517 ERR school-core-api/api  read from undefined value
           method=POST path=/orders/:id/discount
           file=src/orders/apply-discount.handler.ts duration=31ms
           error detail: the object holding .percent was undefined; the coupon may not exist, check before reading .percent
           actual error: TypeError: Cannot read properties of undefined (reading 'percent')
-          trace id:     a3ce929d0e0e47364bf92f3577b34da6  user id: u_2201
+          user id:      u_2201
+          trace id:     a3ce929d0e0e47364bf92f3577b34da6
 
       14:04:50.100 ERR school-core-api/worker  kafka not reachable
           source=kafka
@@ -296,7 +299,8 @@ describe('pretty format', () => {
             actual error: TypeError: Cannot read properties of undefined (reading 'percent')
             stack:        at ApplyDiscountHandler.execute (src/orders/apply-discount.handler.ts)
                           at OrdersController.discount (src/orders/orders.controller.ts)
-            trace id:     a3ce929d0e0e47364bf92f3577b34da6  user id: u_2201"
+            user id:      u_2201
+            trace id:     a3ce929d0e0e47364bf92f3577b34da6"
       `)
   })
 
@@ -348,7 +352,8 @@ describe('pretty format', () => {
       14:02:15.880 WRN school-core-api/api  invalid request body
           method=POST path=/orders status=400 duration=6ms
           error detail: quantity must be ≥ 1; shippingAddress.zip is required
-          trace id:     5ca13e9b0a8d4f21b6e7c3d2a1f09e88  user id: u_1029
+          user id:      u_1029
+          trace id:     5ca13e9b0a8d4f21b6e7c3d2a1f09e88
       "
     `)
   })
@@ -360,7 +365,8 @@ describe('pretty format', () => {
       "14:02:15.880 [33mWRN[0m school-core-api/api  invalid request body
           method=POST path=/orders status=400 duration=6ms
           [2merror detail: [0mquantity must be ≥ 1; shippingAddress.zip is required
-          [2mtrace id:     [0m[2m5ca13e9b0a8d4f21b6e7c3d2a1f09e88[0m  user id: u_1029"
+          [2muser id:      [0mu_1029
+          [2mtrace id:     [0m[2m5ca13e9b0a8d4f21b6e7c3d2a1f09e88[0m"
     `)
   })
 
@@ -379,6 +385,7 @@ describe('pretty format', () => {
       '',
       expect.stringContaining('request completed'),
       expect.stringContaining('method=POST'),
+      expect.stringContaining('user id:'),
       expect.stringContaining('trace id:'),
       '',
       expect.stringContaining('is back'),

@@ -212,7 +212,8 @@ function stackLines(record: Record_, mode: PrettyStack): string[] {
  *       <file target …> duration=…
  *       error detail: <what to do>
  *       actual error: <the error>
- *       trace id:     <trace id>  user id: <user id>
+ *       user id:      <user id>
+ *       trace id:     <trace id>
  */
 export function formatPretty(
   record: Record_,
@@ -250,18 +251,12 @@ export function formatPretty(
   const showTrace = !traceFromWarn || !(level === 'info' || level === 'debug')
   const traceId = record['trace.id']
   const userId = record['user.id']
-  if (showTrace && (present(traceId) || present(userId))) {
-    const parts = [
-      present(traceId)
-        ? `${label('trace id:')}${paint(String(traceId), DIM)}`
-        : '',
-      present(userId)
-        ? present(traceId)
-          ? `  user id: ${userId}`
-          : `${label('user id:')}${userId}`
-        : '',
-    ]
-    lines.push(`${INDENT}${parts.join('')}`)
+  if (showTrace) {
+    // The trace id last: every entry that has one ends with it.
+    if (present(userId)) lines.push(`${INDENT}${label('user id:')}${userId}`)
+    if (present(traceId)) {
+      lines.push(`${INDENT}${label('trace id:')}${paint(String(traceId), DIM)}`)
+    }
   }
   return lines.join('\n')
 }
