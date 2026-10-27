@@ -57,6 +57,43 @@ and `error_target` hold names and counts, never row values — those are on the
 spans, masked. With the TypeORM `DataSource` as `schema`, database names
 (including hash names like `FK_9aac0395…`) appear as `Entity.property`.
 
+## The app's own error codes: `errors init`
+
+The app's own codes (`errorCode` of its exceptions, `code` given to the logger)
+get a hint, category and level from one catalog file, without changing any
+`throw` or `this.logger.*` call:
+
+```sh
+pnpm skilllane-monitoring errors init    # draft src/skilllane-monitoring/errors.ts + README.md from src/
+pnpm skilllane-monitoring errors check   # check it before deploying; exit 1 on a broken rule (CI)
+pnpm skilllane-monitoring uninstall      # remove the catalog, the register imports and the package
+```
+
+`init` drafts every `errorCode: '…'`, logger `code: '…'` and
+`throw new …Exception('…')` message seen 5 times or more (`--min-repeat`); the
+team fills in each `hint`. It never overwrites a file. `--path` puts the
+catalog elsewhere under `src/`, then set `SKILLLANE_MONITORING_ERRORS_FILE_PATH`
+to the same path.
+
+```ts
+// src/skilllane-monitoring/errors.ts
+export default {
+  errors: {
+    codeOf: (err: any) => err.errorCode, // default: err.code, then a Nest exception's errorCode
+    catalog: {
+      STUDENT_LEAVE_SCHOOL: { hint: 'Student left school', category: 'input', level: 'warn' },
+      'ORA-00001': { hint: 'Duplicate exam code' }, // replaces the built-in hint only
+      USER_NOT_FOUND: { messageMatch: /^User not found$/, hint: 'User not found', level: 'warn' },
+    },
+  },
+}
+```
+
+Nothing imports the file: the SDK loads the built file from `dist/` once at
+start (CommonJS) and logs `custom error catalog: …`. Lookup order: the hint
+passed with the error → the app's catalog → the built-in table. A broken rule
+never stops the app. Full rules: the generated `README.md`.
+
 ## Level of an error line inside a request
 
 A pattern may say `warn` for errors that are usually the caller's fault (404,
@@ -192,6 +229,7 @@ JSON with the same fields.
 | `OTEL_SERVICE_NAME` / `SERVICE_VERSION` / `OTEL_ENV` / `APP_ROLE` | package.json / package.json / `NODE_ENV` / – | `service.name` / `.version` / `.environment` / role |
 | `LOG_LEVEL` | `info` | lowest level written |
 | `LOG_PRETTY` / `LOG_STACK` / `LOG_PRETTY_TRACE` | `false` / `off` / `all` | pretty format; `app` / `full` stack; `warn` = user/trace id lines from WRN up only |
+| `SKILLLANE_MONITORING_ERRORS_FILE_PATH` | `src/skilllane-monitoring/errors.ts` | the app's error catalog: its source path under `src/`, or the built `.js` |
 | `UNHANDLED_REJECTION` | `exit` | `log` keeps the process alive |
 | `INFLIGHT_HTTP_AFTER_MS` | `1000` | requests longer than this are listed in `job.inflight` |
 | `DEPENDENCY_STILL_DOWN_MS` | `30000` | interval of `dependency.still_down` |

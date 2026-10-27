@@ -1,6 +1,6 @@
 # ตาราง error ของโปรเจค (project error catalog)
 
-ตั้งแต่ `skilllane-monitoring` 0.3.0 แอปสอน logger ให้รู้จัก error code ของตัวเองได้จากไฟล์เดียว
+ตั้งแต่ `skilllane-monitoring` 0.4.0 แอปสอน logger ให้รู้จัก error code ของตัวเองได้จากไฟล์เดียว
 hint, คำอธิบาย, ใครต้องแก้ และระดับของ error เหล่านั้นจะขึ้นใน log และหน้า monitor โดยไม่ต้องแก้วิธี throw ที่มีอยู่
 
 ## เริ่มใช้
