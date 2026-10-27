@@ -28,7 +28,7 @@ import { captureSettings } from './settings'
  * `db.statement.parameters`, pg `db.postgresql.values`, moved into
  * `skilllane.monitoring.db.parameters`), url.full / url.query, statements, every other
  * attribute (the key rule on its name, the value rule on its value: a Kafka
- * message key, a BullMQ job id or `enduser.id` holding an email), every
+ * message key, a BullMQ job id or `enduser.id` holding a token), every
  * event's attributes and the status message. Runs with LOG_CAPTURE=off too.
  */
 

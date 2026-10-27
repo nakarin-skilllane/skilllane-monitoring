@@ -5,20 +5,11 @@ import { isSensitiveKey, isSensitiveQueryName, REDACTED } from './keys'
  * credentials, the credential after `Authorization:` whatever its scheme, URL
  * userinfo (`scheme://user:[REDACTED]@`), a `name = value` / `"name": "value"`
  * pair whose name is sensitive (the key rule), a string that is itself JSON
- * (masked as JSON), email, Thai national ID (mod-11 checksum). Plus the JSON
+ * (masked as JSON), Thai national ID (mod-11 checksum). Plus the JSON
  * masking of bodies and payloads: key rule and value rule, strict for whole
  * JSON, a tolerant scan for cut or invalid JSON that fails closed.
  */
 
-const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
-// Same match, with bounded parts (RFC: local part ≤ 64, domain ≤ 253), for a
-// run too long for EMAIL's backtracking.
-const EMAIL_BOUNDED =
-  /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}/g
-// A maximal run of the characters an email is made of: every EMAIL match lies
-// inside one such run.
-const EMAIL_RUN = /(?<![A-Za-z0-9._%+@-])[A-Za-z0-9._%+@-]+/g
-const EMAIL_RUN_MAX = 1_024
 const JWT = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
 const BEARER = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi
 const BEARER_HINT = /bearer|basic/i
@@ -49,22 +40,6 @@ export function isThaiNationalId(digits: string): boolean {
 export function stripQuery(path: string): string {
   const index = path.indexOf('?')
   return index === -1 ? path : path.slice(0, index)
-}
-
-/**
- * EMAIL, in linear time: run over a 64 KB base64 or digit string, the plain
- * pattern backtracks from every position (seconds). It is applied to each run
- * holding an `@` only, which finds exactly the same matches.
- */
-function redactEmails(text: string): string {
-  return text.replace(EMAIL_RUN, (run) =>
-    run.includes('@')
-      ? run.replace(
-          run.length > EMAIL_RUN_MAX ? EMAIL_BOUNDED : EMAIL,
-          REDACTED,
-        )
-      : run,
-  )
 }
 
 function lineEnd(text: string, from: number): number {
@@ -258,7 +233,6 @@ export function redactValue(text: string, options: RedactOptions = {}): string {
   }
   if (out.includes('=') || out.includes(':'))
     out = redactPairs(out, { sql, json: false })
-  if (out.includes('@')) out = redactEmails(out)
   if (DIGITS5.test(out)) {
     out = out.replace(THAI_ID, (match, ...groups: string[]) =>
       isThaiNationalId(groups.slice(0, 5).join('')) ? REDACTED : match,
@@ -282,9 +256,9 @@ export function maskNumber(value: number): number | string {
     : value
 }
 
-/** An object key holding an email or a national ID (a map keyed by email) gets the value rule too. */
+/** An object key holding a national ID (a map keyed by citizen id) gets the value rule too. */
 function maskKey(key: string): string {
-  return key.includes('@') || DIGITS5.test(key) ? redactValue(key) : key
+  return DIGITS5.test(key) ? redactValue(key) : key
 }
 
 function hasOwn(record: object, key: string): boolean {

@@ -32,9 +32,6 @@ const COLORS: Record<LogLevel, string> = {
 const DIM = '\x1b[2m'
 const RESET = '\x1b[0m'
 
-/** The longest role name; every service/role column gets this width. */
-const LONGEST_ROLE = 'persister'
-const TITLE_WIDTH = 28
 const INDENT = '    '
 const LABEL_WIDTH = 14
 const MAX_APP_FRAMES = 5
@@ -114,11 +111,19 @@ function duration(record: Record_): string | undefined {
     : undefined
 }
 
+function pairsText(pairs: [string, unknown][]): string {
+  return pairs
+    .filter(([, value]) => present(value))
+    .map(([key, value]) => `${key}=${value}`)
+    .join(' ')
+}
+
 /**
- * method path status │ source job id attempt │ file │ target │ others │
- * duration — only those with a value.
+ * Only those with a value, one line each: what ran (method path status
+ * source job id attempt), then where (file target reason dlq affects retry
+ * port); duration ends the last line.
  */
-function keyValues(record: Record_): string {
+function keyValueLines(record: Record_): string[] {
   const attempt = present(record['job.attempt'])
     ? present(record['job.max_attempts'])
       ? `${record['job.attempt']}/${record['job.max_attempts']}`
@@ -127,28 +132,33 @@ function keyValues(record: Record_): string {
   const affects = Array.isArray(record['dependency.affects'])
     ? (record['dependency.affects'] as string[]).join(',')
     : undefined
-  const pairs: [string, unknown][] = [
-    ['method', record['http.request.method']],
-    // The route has no ids in it; the raw path only when nothing matched.
-    ['path', record['http.route'] ?? record['url.path']],
-    ['status', record['http.response.status_code']],
-    ['source', record['event.module']],
-    ['job', jobName(record)],
-    ['id', record['job.id']],
-    ['attempt', attempt],
-    ['file', record['log.origin.file.name']],
-    ['target', target(record)],
-    ['reason', record.reason],
-    ['dlq', record.dlq],
-    ['affects', affects || undefined],
-    ['retry', record['dependency.attempt']],
-    ['port', record['server.port']],
-    ['duration', duration(record)],
-  ]
-  return pairs
-    .filter(([, value]) => present(value))
-    .map(([key, value]) => `${key}=${value}`)
-    .join(' ')
+  const lines = [
+    pairsText([
+      ['method', record['http.request.method']],
+      // The route has no ids in it; the raw path only when nothing matched.
+      ['path', record['http.route'] ?? record['url.path']],
+      ['status', record['http.response.status_code']],
+      ['source', record['event.module']],
+      ['job', jobName(record)],
+      ['id', record['job.id']],
+      ['attempt', attempt],
+    ]),
+    pairsText([
+      ['file', record['log.origin.file.name']],
+      ['target', target(record)],
+      ['reason', record.reason],
+      ['dlq', record.dlq],
+      ['affects', affects || undefined],
+      ['retry', record['dependency.attempt']],
+      ['port', record['server.port']],
+    ]),
+  ].filter(Boolean)
+  const took = duration(record)
+  if (took) {
+    if (lines.length) lines[lines.length - 1] += ` duration=${took}`
+    else lines.push(`duration=${took}`)
+  }
+  return lines
 }
 
 function actualError(record: Record_): string | undefined {
@@ -197,10 +207,13 @@ function stackLines(record: Record_, mode: PrettyStack): string[] {
 /**
  * The LOG_PRETTY=true format:
  *
- *   <time> <LVL> <service/role>  <title>  <key=value …> duration=…
+ *   <time> <LVL> <service/role>  <title>
+ *       <method path status source job id attempt>
+ *       <file target …> duration=…
  *       error detail: <what to do>
  *       actual error: <the error>
- *       trace id:     <trace id>  user id: <user id>
+ *       user id:      <user id>
+ *       trace id:     <trace id>
  */
 export function formatPretty(
   record: Record_,
@@ -212,17 +225,14 @@ export function formatPretty(
     color ? `${code}${text}${RESET}` : text
   const label = (text: string) => paint(text.padEnd(LABEL_WIDTH), DIM)
 
-  const service = String(record['service.name'] ?? '')
-  const serviceWidth = service.split('/')[0].length + 1 + LONGEST_ROLE.length
-  const head = title(record)
-  const kv = keyValues(record)
   const first = [
     time(String(record['@timestamp'])),
     paint(LEVEL_LABEL[level] ?? level.toUpperCase(), COLORS[level] ?? ''),
-    `${service.padEnd(serviceWidth)}  ${kv ? head.padEnd(TITLE_WIDTH - 1) : head}${kv ? ` ${kv}` : ''}`,
+    `${record['service.name'] ?? ''}  ${title(record)}`,
   ].join(' ')
 
   const lines = [first.trimEnd()]
+  for (const kv of keyValueLines(record)) lines.push(`${INDENT}${kv}`)
   const detail = record['error.fix'] ?? record['error.hint_detail']
   if (present(detail)) {
     lines.push(`${INDENT}${label('error detail:')}${detail}`)
@@ -241,18 +251,12 @@ export function formatPretty(
   const showTrace = !traceFromWarn || !(level === 'info' || level === 'debug')
   const traceId = record['trace.id']
   const userId = record['user.id']
-  if (showTrace && (present(traceId) || present(userId))) {
-    const parts = [
-      present(traceId)
-        ? `${label('trace id:')}${paint(String(traceId), DIM)}`
-        : '',
-      present(userId)
-        ? present(traceId)
-          ? `  user id: ${userId}`
-          : `${label('user id:')}${userId}`
-        : '',
-    ]
-    lines.push(`${INDENT}${parts.join('')}`)
+  if (showTrace) {
+    // The trace id last: every entry that has one ends with it.
+    if (present(userId)) lines.push(`${INDENT}${label('user id:')}${userId}`)
+    if (present(traceId)) {
+      lines.push(`${INDENT}${label('trace id:')}${paint(String(traceId), DIM)}`)
+    }
   }
   return lines.join('\n')
 }

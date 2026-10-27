@@ -188,33 +188,50 @@ describe('pretty format', () => {
     const write = createPrettyWriter({ stream })
     for (const record of Object.values(examples)) write(record, 'info')
     expect(output()).toMatchInlineSnapshot(`
-      "14:00:04.812 INF school-core-api/api        app started                 port=3000 duration=4.1s
+      "14:00:04.812 INF school-core-api/api  app started
+          port=3000 duration=4.1s
 
-      14:02:11.204 INF school-core-api/api        request completed           method=POST path=/orders status=201 duration=84ms
-          trace id:     4bf92f3577b34da6a3ce929d0e0e4736  user id: u_1029
+      14:02:11.204 INF school-core-api/api  request completed
+          method=POST path=/orders status=201 duration=84ms
+          user id:      u_1029
+          trace id:     4bf92f3577b34da6a3ce929d0e0e4736
 
-      14:02:15.880 WRN school-core-api/api        invalid request body        method=POST path=/orders status=400 duration=6ms
+      14:02:15.880 WRN school-core-api/api  invalid request body
+          method=POST path=/orders status=400 duration=6ms
           error detail: quantity must be ≥ 1; shippingAddress.zip is required
-          trace id:     5ca13e9b0a8d4f21b6e7c3d2a1f09e88  user id: u_1029
+          user id:      u_1029
+          trace id:     5ca13e9b0a8d4f21b6e7c3d2a1f09e88
 
-      14:03:40.517 ERR school-core-api/api        read from undefined value   method=POST path=/orders/:id/discount file=src/orders/apply-discount.handler.ts duration=31ms
+      14:03:40.517 ERR school-core-api/api  read from undefined value
+          method=POST path=/orders/:id/discount
+          file=src/orders/apply-discount.handler.ts duration=31ms
           error detail: the object holding .percent was undefined; the coupon may not exist, check before reading .percent
           actual error: TypeError: Cannot read properties of undefined (reading 'percent')
-          trace id:     a3ce929d0e0e47364bf92f3577b34da6  user id: u_2201
+          user id:      u_2201
+          trace id:     a3ce929d0e0e47364bf92f3577b34da6
 
-      14:04:50.100 ERR school-core-api/worker     kafka not reachable         source=kafka target=kafka-0.kafka:9092
+      14:04:50.100 ERR school-core-api/worker  kafka not reachable
+          source=kafka
+          target=kafka-0.kafka:9092
           error detail: cannot connect to the Kafka broker; check broker status and KAFKA_BROKERS
           actual error: KafkaJSConnectionError: Connection error: connect ECONNREFUSED 10.0.4.12:9092
 
-      14:05:02.093 ERR school-core-api/worker     payment API not responding  source=bullmq job=charge-order id=88412 attempt=2/5 target=api.paygate.example duration=10.0s
+      14:05:02.093 ERR school-core-api/worker  payment API not responding
+          source=bullmq job=charge-order id=88412 attempt=2/5
+          target=api.paygate.example duration=10.0s
           error detail: no reply within 10s; the provider may be down, orders will retry automatically
           actual error: AxiosError [ETIMEDOUT] timeout of 10000ms exceeded
           trace id:     e7c3d2a1f09e885ca13e9b0a8d4f21b6
 
-      14:05:20.100 WRN school-core-api/api        redis "cache" still down    target=10.0.3.21:6379 retry=9 duration=30.0s
-      14:05:35.300 INF school-core-api/api        redis "cache" is back       target=10.0.3.21:6379 duration=45.2s
+      14:05:20.100 WRN school-core-api/api  redis "cache" still down
+          target=10.0.3.21:6379 retry=9 duration=30.0s
 
-      14:06:10.517 ERR school-core-api/worker     message moved to dlq        source=kafka job=order-events id=p3-o88214 attempt=5/5 dlq=order-events.dlq duration=2.4s
+      14:05:35.300 INF school-core-api/api  redis "cache" is back
+          target=10.0.3.21:6379 duration=45.2s
+
+      14:06:10.517 ERR school-core-api/worker  message moved to dlq
+          source=kafka job=order-events id=p3-o88214 attempt=5/5
+          dlq=order-events.dlq duration=2.4s
           error detail: two operations locked each other; usually solved by retry, if frequent review the order of updates
           actual error: QueryFailedError: deadlock detected
           trace id:     0a8d4f21b6e7c3d2a1f09e885ca13e9b
@@ -242,8 +259,23 @@ describe('pretty format', () => {
     )
   })
 
-  it('without error, trace or user, is one line', () => {
-    expect(formatPretty(examples.redisUp).split('\n')).toHaveLength(1)
+  it('without error, trace or user: the title and its key=values', () => {
+    expect(formatPretty(examples.redisUp).split('\n')).toEqual([
+      '14:05:35.300 INF school-core-api/api  redis "cache" is back',
+      '    target=10.0.3.21:6379 duration=45.2s',
+    ])
+  })
+
+  it('with nothing but a title, is one line', () => {
+    const { 'server.port': _, duration_ms, ...record } = examples.appStarted
+    expect(formatPretty(record)).toBe(
+      '14:00:04.812 INF school-core-api/api  app started',
+    )
+  })
+
+  it('duration alone gets its own line', () => {
+    const { 'server.port': _, ...record } = examples.appStarted
+    expect(formatPretty(record).split('\n')[1]).toBe('    duration=4.1s')
   })
 
   it('shows a target from labels before the dependency address', () => {
@@ -251,19 +283,24 @@ describe('pretty format', () => {
       ...examples.nullRead,
       labels: { error_target: 'percent' },
     }
-    expect(formatPretty(record).split('\n')[0]).toContain('target=percent')
+    expect(formatPretty(record).split('\n')[2]).toBe(
+      '    file=src/orders/apply-discount.handler.ts target=percent duration=31ms',
+    )
   })
 
   it('LOG_STACK=app lists our frames without line numbers', () => {
     expect(
       formatPretty(examples.nullRead, { stack: 'app' }),
     ).toMatchInlineSnapshot(`
-        "14:03:40.517 ERR school-core-api/api        read from undefined value   method=POST path=/orders/:id/discount file=src/orders/apply-discount.handler.ts duration=31ms
+        "14:03:40.517 ERR school-core-api/api  read from undefined value
+            method=POST path=/orders/:id/discount
+            file=src/orders/apply-discount.handler.ts duration=31ms
             error detail: the object holding .percent was undefined; the coupon may not exist, check before reading .percent
             actual error: TypeError: Cannot read properties of undefined (reading 'percent')
             stack:        at ApplyDiscountHandler.execute (src/orders/apply-discount.handler.ts)
                           at OrdersController.discount (src/orders/orders.controller.ts)
-            trace id:     a3ce929d0e0e47364bf92f3577b34da6  user id: u_2201"
+            user id:      u_2201
+            trace id:     a3ce929d0e0e47364bf92f3577b34da6"
       `)
   })
 
@@ -271,10 +308,13 @@ describe('pretty format', () => {
     expect(formatPretty(examples.nullRead)).not.toContain('stack:')
   })
 
-  it('LOG_PRETTY_TRACE=warn keeps INF on one line', () => {
+  it('LOG_PRETTY_TRACE=warn drops the trace line from INF', () => {
     expect(
       formatPretty(examples.requestCompleted, { trace: 'warn' }).split('\n'),
-    ).toHaveLength(1)
+    ).toEqual([
+      '14:02:11.204 INF school-core-api/api  request completed',
+      '    method=POST path=/orders status=201 duration=84ms',
+    ])
     expect(formatPretty(examples.invalidBody, { trace: 'warn' })).toContain(
       'trace id:',
     )
@@ -306,11 +346,14 @@ describe('pretty format', () => {
     write(examples.requestCompleted, 'info')
     write(examples.invalidBody, 'warn')
     expect(output()).toMatchInlineSnapshot(`
-      "14:02:11.204 INF school-core-api/api        request completed           method=POST path=/orders status=201 duration=84ms
+      "14:02:11.204 INF school-core-api/api  request completed
+          method=POST path=/orders status=201 duration=84ms
 
-      14:02:15.880 WRN school-core-api/api        invalid request body        method=POST path=/orders status=400 duration=6ms
+      14:02:15.880 WRN school-core-api/api  invalid request body
+          method=POST path=/orders status=400 duration=6ms
           error detail: quantity must be ≥ 1; shippingAddress.zip is required
-          trace id:     5ca13e9b0a8d4f21b6e7c3d2a1f09e88  user id: u_1029
+          user id:      u_1029
+          trace id:     5ca13e9b0a8d4f21b6e7c3d2a1f09e88
       "
     `)
   })
@@ -319,25 +362,34 @@ describe('pretty format', () => {
     expect(
       formatPretty(examples.invalidBody, { color: true }),
     ).toMatchInlineSnapshot(`
-      "14:02:15.880 [33mWRN[0m school-core-api/api        invalid request body        method=POST path=/orders status=400 duration=6ms
+      "14:02:15.880 [33mWRN[0m school-core-api/api  invalid request body
+          method=POST path=/orders status=400 duration=6ms
           [2merror detail: [0mquantity must be ≥ 1; shippingAddress.zip is required
-          [2mtrace id:     [0m[2m5ca13e9b0a8d4f21b6e7c3d2a1f09e88[0m  user id: u_1029"
+          [2muser id:      [0mu_1029
+          [2mtrace id:     [0m[2m5ca13e9b0a8d4f21b6e7c3d2a1f09e88[0m"
     `)
   })
 
   it('separates multi-line entries by one blank line, not single ones', () => {
     const { stream, output } = capture(false)
     const write = createPrettyWriter({ stream })
-    write(examples.redisStillDown, 'warn')
-    write(examples.redisUp, 'info')
+    const { 'server.port': _, duration_ms, ...started } = examples.appStarted
+    write(started, 'info')
+    write(started, 'info')
     write(examples.requestCompleted, 'info')
-    write(examples.appStarted, 'info')
+    write(examples.redisUp, 'info')
+    write(started, 'info')
     expect(output().split('\n')).toEqual([
-      expect.stringContaining('still down'),
-      expect.stringContaining('is back'),
+      expect.stringContaining('app started'),
+      expect.stringContaining('app started'),
       '',
       expect.stringContaining('request completed'),
+      expect.stringContaining('method=POST'),
+      expect.stringContaining('user id:'),
       expect.stringContaining('trace id:'),
+      '',
+      expect.stringContaining('is back'),
+      expect.stringContaining('target='),
       '',
       expect.stringContaining('app started'),
       '',

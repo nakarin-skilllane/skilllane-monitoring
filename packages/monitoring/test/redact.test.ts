@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { maskJsonText, maskObject, maskUrl } from '../src/contract'
 import {
   isThaiNationalId,
   REDACTED,
@@ -23,11 +24,11 @@ describe('redactText', () => {
     )
   })
 
-  it('redacts emails, JWTs, bearer tokens and secret pairs', () => {
+  it('keeps emails, redacts JWTs, bearer tokens and secret pairs', () => {
     const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc_DEF-123'
     const text = `user a.b@school.ac.th token=${jwt} Authorization: Bearer xyz password=hunter2`
     const out = redactText(text)
-    expect(out).not.toContain('a.b@school.ac.th')
+    expect(out).toContain('user a.b@school.ac.th ')
     expect(out).not.toContain(jwt)
     expect(out).not.toContain('xyz')
     expect(out).not.toContain('hunter2')
@@ -57,11 +58,48 @@ describe('redactRecord', () => {
 
   it('keeps at most 10 labels and redacts their values', () => {
     const labels = Object.fromEntries(
-      Array.from({ length: 12 }, (_, i) => [`k${i}`, i === 0 ? 'a@b.co' : 'v']),
+      Array.from({ length: 12 }, (_, i) => [
+        `k${i}`,
+        i === 0 ? 'Bearer abc' : 'v',
+      ]),
     )
     const record: Record<string, unknown> = { labels }
     redactRecord(record)
     expect(Object.keys(record.labels as object)).toHaveLength(10)
-    expect((record.labels as any).k0).toBe(REDACTED)
+    expect((record.labels as any).k0).toBe(`Bearer ${REDACTED}`)
+  })
+})
+
+describe('emails are not masked', () => {
+  it('in a body, next to a masked password', () => {
+    expect(
+      maskJsonText('{"email":"pim@ndlp.go.th","password":"hunter2"}'),
+    ).toBe(`{"email":"pim@ndlp.go.th","password":"${REDACTED}"}`)
+  })
+
+  it('as an object key and a value', () => {
+    expect(
+      maskObject({ 'pim@ndlp.go.th': { to: 'a.b@school.ac.th' } }),
+    ).toEqual({ 'pim@ndlp.go.th': { to: 'a.b@school.ac.th' } })
+  })
+
+  it('in a URL path, userinfo still masked', () => {
+    expect(maskUrl('https://u:pw@api.local/users/pim@ndlp.go.th')).toBe(
+      `https://u:${REDACTED}@api.local/users/pim@ndlp.go.th`,
+    )
+  })
+
+  it('in a log line', () => {
+    const record: Record<string, unknown> = {
+      message: 'invite sent to pim@ndlp.go.th',
+      'user.id': 'pim@ndlp.go.th',
+      'url.path': '/users/pim@ndlp.go.th',
+    }
+    redactRecord(record)
+    expect(record).toEqual({
+      message: 'invite sent to pim@ndlp.go.th',
+      'user.id': 'pim@ndlp.go.th',
+      'url.path': '/users/pim@ndlp.go.th',
+    })
   })
 })

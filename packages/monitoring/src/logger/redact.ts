@@ -31,7 +31,7 @@ const TEXT_FIELDS = [
   'reason',
 ]
 
-/** Values that may carry an email or a token: the value rule. */
+/** Values that may carry a token: the value rule. */
 const VALUE_FIELDS = ['user.id', 'url.domain']
 /** Where a dependency is: a URL or `user:password@host` (the password). */
 const ENDPOINT_FIELDS = ['dependency.name', 'dependency.host']
@@ -81,7 +81,7 @@ export function redactRecord(record: Record<string, unknown>): string[] {
   if (typeof record['job.id'] === 'string')
     record['job.id'] = maskIdentifier(record['job.id'] as string)
   if (typeof record['url.path'] === 'string') {
-    // A segment under a sensitive route parameter (/reset-password/:token), an email, a JWT.
+    // A segment under a sensitive route parameter (/reset-password/:token), a JWT.
     const route =
       typeof record['http.route'] === 'string'
         ? (record['http.route'] as string)

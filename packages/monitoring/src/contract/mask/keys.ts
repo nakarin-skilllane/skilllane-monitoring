@@ -12,7 +12,7 @@ export const REDACTED = '[REDACTED]'
  * (`skilllane.monitoring.mask`); the engine masks items of a sender without it (another SDK,
  * an older skilllane-monitoring) itself, and trusts items of this version or later.
  */
-export const MASK_VERSION = 2
+export const MASK_VERSION = 3
 export const MASK_RESOURCE_KEY = 'skilllane.monitoring.mask'
 
 /** A key whose lower case contains one of these is sensitive (school-core-api's list, and more). */

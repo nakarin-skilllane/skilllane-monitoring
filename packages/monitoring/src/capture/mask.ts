@@ -14,7 +14,7 @@ import { maskObject, redactValue } from '../contract'
  *   cookie and set-cookie with their names and attributes kept;
  * - value rule: redactValue on every string value (JWT, Bearer / Basic, the
  *   credential after `Authorization:`, URL userinfo, sensitive `name=value`
- *   pairs, JSON inside a string, email, Thai national ID) and a 13-digit
+ *   pairs, JSON inside a string, Thai national ID) and a 13-digit
  *   number that is a valid Thai national ID.
  */
 export {
