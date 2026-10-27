@@ -1,7 +1,6 @@
 import type { ErrorPattern } from './types'
 
-// ldapts error classes, one per LDAP result code (RFC 4511). Oracle IAM is the
-// directory school-core-api talks to.
+// ldapts error classes, one per LDAP result code (RFC 4511).
 export const ldapPatterns: ErrorPattern[] = [
   {
     key: 'InvalidCredentialsError',

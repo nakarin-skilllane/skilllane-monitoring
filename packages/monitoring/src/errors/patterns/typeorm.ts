@@ -1,7 +1,7 @@
 import type { ErrorPattern } from './types'
 
 // TypeORM 0.3 errors (src/error/*), matched by class name (generic adapter)
-// or message. school-core-api: findOneOrFail ×122, transactions/query runners ×318.
+// or message.
 export const typeormPatterns: ErrorPattern[] = [
   {
     key: 'EntityNotFoundError',

@@ -25,9 +25,9 @@ export default {
     // code ของแอปอยู่ช่องไหนของ error (ไม่ใส่ = err.code และ errorCode ของ exception ของ Nest)
     codeOf: (err: any) => err.errorCode,
     catalog: {
-      STUDENT_LEAVE_SCHOOL: { hint: 'Student left school', hintDetail: 'The student is retired; check the roster.', category: 'input', level: 'warn' },
-      1701: { hint: 'Role title exists', hintDetail: 'Another role of the school has this title.', category: 'input' },
-      'ORA-00001': { hint: 'Duplicate exam code' },                                             // ทับ hint ของตารางในตัว
+      ORDER_ALREADY_PAID: { hint: 'Order already paid', hintDetail: 'The order was paid before; check the payment status.', category: 'input', level: 'warn' },
+      1701: { hint: 'Coupon expired', hintDetail: 'The coupon is past its end date.', category: 'input' },
+      'ORA-00001': { hint: 'Duplicate product SKU' },                                             // ทับ hint ของตารางในตัว
       USER_NOT_FOUND: { messageMatch: /^User not found$/, hint: 'User not found', category: 'input', level: 'warn' },  // error ที่ไม่มี code
     },
   },
@@ -38,7 +38,7 @@ export default {
 
 ## ทำงานอย่างไร
 
-- **โค้ดเดิมไม่ต้องแก้** error ที่มี code ตรงกับตารางได้ hint อัตโนมัติ ทั้งที่ throw (`throw new StudentRetiredException()`) และที่บันทึกเอง (`this.logger.error('Import failed', { code: 'E1001' })`)
+- **โค้ดเดิมไม่ต้องแก้** error ที่มี code ตรงกับตารางได้ hint อัตโนมัติ ทั้งที่ throw (`throw new OrderAlreadyPaidException()`) และที่บันทึกเอง (`this.logger.error('Import failed', { code: 'E1001' })`)
 - **ลำดับหา hint:** hint ที่ส่งมากับ error เอง → ตารางของโปรเจค → ตารางในตัว package → ไม่มี hint
 - **code เป็นตัวเลขหรืออยู่ช่องอื่น:** ใส่ `codeOf` เช่น `(err) => err.errorCode`
 - **error ที่ไม่มี code** (เช่น `NotFoundException('User not found')`): ใช้ `messageMatch` แล้ว `error.code` ของบรรทัดนั้นจะเป็นชื่อ key แทน `HTTP_404`

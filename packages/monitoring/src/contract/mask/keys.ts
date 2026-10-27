@@ -15,7 +15,7 @@ export const REDACTED = '[REDACTED]'
 export const MASK_VERSION = 3
 export const MASK_RESOURCE_KEY = 'skilllane.monitoring.mask'
 
-/** A key whose lower case contains one of these is sensitive (school-core-api's list, and more). */
+/** A key whose lower case contains one of these is sensitive (a production app's list, and more). */
 export const SENSITIVE_KEYS = [
   'password',
   'confirmpassword',

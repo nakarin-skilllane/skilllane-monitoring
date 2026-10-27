@@ -6,8 +6,8 @@ import {
 } from './explain-helpers'
 import type { ErrorPattern } from './types'
 
-// Codes referenced by school-core-api (oracle-error-code.ts, exception.filter.ts,
-// repository comments) plus connection/pool errors of node-oracledb thin mode.
+// Common ORA- codes of application code (constraints, values, SQL) plus
+// connection/pool errors of node-oracledb thin mode.
 export const oraclePatterns: ErrorPattern[] = [
   {
     key: 'ORA-00001',

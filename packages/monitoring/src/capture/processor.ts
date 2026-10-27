@@ -23,7 +23,7 @@ import { captureSettings } from './settings'
  * First span processor of the SDK. `onEnding` (the span can still take
  * attributes) writes what the capture hooks collected, then masks everything
  * other code put on the span, so no exporter ever sees an unmasked value: the
- * app's own hooks (school-core-api's http.request.body), instrumentations'
+ * app's own hooks (e.g. an http.request.body it writes), instrumentations'
  * raw bind values (oracledb `db.operation.parameter.<i>`, TypeORM
  * `db.statement.parameters`, pg `db.postgresql.values`, moved into
  * `skilllane.monitoring.db.parameters`), url.full / url.query, statements, every other

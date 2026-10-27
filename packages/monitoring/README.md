@@ -13,8 +13,8 @@ NODE_OPTIONS="--require skilllane-monitoring/register" node dist/main.js
 ```
 
 or `import 'skilllane-monitoring/register'` first in `main.ts`. A service with
-its own instrumentation file calls `registerTelemetry({ ... })` there instead
-(school-core-api: `src/instrumentation.ts`).
+its own instrumentation file (e.g. `src/instrumentation.ts`) calls
+`registerTelemetry({ ... })` there instead.
 
 | Wires | How |
 | --- | --- |
@@ -33,24 +33,24 @@ auto-discovery cannot guess go to `LoggingModule.forRoot({ watch: { … } })`.
 Business code keeps `new Logger(Class.name)`:
 
 ```ts
-this.logger.error('Failed to load class report', err)
-this.logger.error('Failed to import score row', { code: 'SCORE_OUT_OF_RANGE', hint: 'Score out of range' })
+this.logger.error('Failed to load the sales report', err)
+this.logger.error('Failed to import a price row', { code: 'PRICE_OUT_OF_RANGE', hint: 'Price out of range' })
 this.logger.warn('Authentication rejected', { event: 'auth.rejected', reason: 'token_expired' })
-await tracked('cache:rebuild_school_list', () => this.rebuild())
-throw new AppError('SCORE_OUT_OF_RANGE', 'Score out of range', { hint: '…', cause: err })
+await tracked('cache:rebuild_product_list', () => this.rebuild())
+throw new AppError('PRICE_OUT_OF_RANGE', 'Price out of range', { hint: '…', cause: err })
 ```
 
 ## Where to fix it
 
 | Field | Example | From |
 | --- | --- | --- |
-| `http.request.method`, `http.route` | `GET /question-bank/my` | the request |
-| `labels.usecase` | `GetMyQuestionsQuery` | the CQRS query/command it escaped from |
-| `log.origin.function` / `.file.name` | `GetMyQuestionsHandler.execute`, `src/…/get-my-questions.handler.ts` | first stack frame of our code (`dist/*.js` mapped to `src/*.ts`, no line numbers) |
-| `labels.error_target` | `id`, `APP.UQ_QUESTION_CODE` | property, constraint or column named in the message |
-| `labels.failed_step` | `oracle INSERT QUESTION_BANK` | last outgoing call that failed (needs OTel) |
+| `http.request.method`, `http.route` | `GET /orders/:id` | the request |
+| `labels.usecase` | `GetOrderQuery` | the CQRS query/command it escaped from |
+| `log.origin.function` / `.file.name` | `GetOrderHandler.execute`, `src/orders/get-order.handler.ts` | first stack frame of our code (`dist/*.js` mapped to `src/*.ts`, no line numbers) |
+| `labels.error_target` | `id`, `APP.UQ_PRODUCT_SKU` | property, constraint or column named in the message |
+| `labels.failed_step` | `oracle INSERT PRODUCT` | last outgoing call that failed (needs OTel) |
 | `labels.error_category` | `bug` · `input` · `data` · `dependency` · `config` | who has to act |
-| `error.fix` | `QuestionBankEntity.title got 312 (max 255). …` | this specific case; shown instead of `hint_detail` in pretty |
+| `error.fix` | `ProductEntity.name got 312 (max 255). …` | this specific case; shown instead of `hint_detail` in pretty |
 
 `error.hint` is constant per kind of error (group and alert on it); `error.fix`
 and `error_target` hold names and counts, never row values — those are on the
@@ -81,8 +81,8 @@ export default {
   errors: {
     codeOf: (err: any) => err.errorCode, // default: err.code, then a Nest exception's errorCode
     catalog: {
-      STUDENT_LEAVE_SCHOOL: { hint: 'Student left school', category: 'input', level: 'warn' },
-      'ORA-00001': { hint: 'Duplicate exam code' }, // replaces the built-in hint only
+      ORDER_ALREADY_PAID: { hint: 'Order already paid', category: 'input', level: 'warn' },
+      'ORA-00001': { hint: 'Duplicate product SKU' }, // replaces the built-in hint only
       USER_NOT_FOUND: { messageMatch: /^User not found$/, hint: 'User not found', level: 'warn' },
     },
   },
@@ -188,7 +188,7 @@ to mask version 2).
 JSON with the same fields.
 
 ```
-14:03:40.517 ERR school-core-api/api  read from undefined value
+14:03:40.517 ERR orders-api/api  read from undefined value
     method=POST path=/orders/:id/discount
     file=src/orders/apply-discount.handler.ts duration=31ms
     error detail: the object holding .percent was undefined; …
@@ -196,7 +196,7 @@ JSON with the same fields.
     user id:      u_2201
     trace id:     a3ce929d0e0e47364bf92f3577b34da6
 
-14:05:20.100 WRN school-core-api/api  redis "cache" still down
+14:05:20.100 WRN orders-api/api  redis "cache" still down
     target=10.0.3.21:6379 retry=9 duration=30.0s
 ```
 
@@ -212,50 +212,63 @@ JSON with the same fields.
 
 ## Environment
 
+Service
+
 | Variable | Default | Meaning |
 | --- | --- | --- |
+| `OTEL_SERVICE_NAME` | package.json name | `service.name` |
+| `APP_ROLE` | – | `api`, `worker` …, appended as `service.name` = `<name>/<role>` |
+| `SERVICE_VERSION` | package.json version | `service.version` |
+| `OTEL_ENV` | `NODE_ENV` | `service.environment` |
 | `LOGGING_ENGINE` | `new` | `legacy` = nothing from this library is installed |
-| `LOG_NEST_AUTO` / `LOG_AUTO_WATCH` | `true` | `false` = no Nest wiring / no ioredis, kafkajs, amqplib, schedule watching |
-| `LOG_EXPORT` | from config | `kafka` · `rabbitmq` · `bullmq` · `http` · `otlp` · `stdout` (see Queue export) |
-| `LOG_KAFKA_BROKERS` / `_CLIENT_ID` / `_SSL` | — / `skilllane-monitoring-<service>` / off | `host:port,…`; `LOG_KAFKA_SASL_MECHANISM` / `_USERNAME` / `_PASSWORD` for SASL |
-| `LOG_RABBITMQ_URL` / `_EXCHANGE` | — / `skilllane-monitoring.telemetry` | `amqp://user:pass@host:5672/vhost` |
-| `LOG_BULLMQ_REDIS_URL` / `_PREFIX` | — / `bull` | the queue Redis, not the app's cache |
-| `LOG_HTTP_URL` / `LOG_HTTP_TOKEN` | — | the engine's base URL; the token only when the engine sets one |
-| `LOG_TOPIC_LOGS` / `LOG_TOPIC_SPANS` | `skilllane-monitoring.logs` / `.spans` | topic / routing key / queue names |
-| `OTEL_EXPORTER_ENDPOINT` | — | OTLP Collector, e.g. `http://otel-collector:4318` |
-| `LOG_EXPORT_BATCH_MS` / `_BATCH_SIZE` / `_MAX_QUEUE` | `1000` / `500` / `10000` | batching; oldest dropped when full |
-| `LOG_EXPORT_MAX_BYTES` / `_MAX_QUEUE_BYTES` | `800000` / 64 MB | one message / items waiting per stream |
-| `LOG_EXPORT_SHUTDOWN_MS` | `3000` | how long shutdown waits for the exporters |
-| `OTEL_SERVICE_NAME` / `SERVICE_VERSION` / `OTEL_ENV` / `APP_ROLE` | package.json / package.json / `NODE_ENV` / – | `service.name` / `.version` / `.environment` / role |
+| `LOG_NEST_AUTO` | `true` | `false` = no automatic Nest wiring |
+| `LOG_AUTO_WATCH` | `true` | `false` = do not watch ioredis, kafkajs, amqplib, @nestjs/schedule |
 | `LOG_LEVEL` | `info` | lowest level written |
-| `LOG_PRETTY` / `LOG_STACK` / `LOG_PRETTY_TRACE` | `false` / `off` / `all` | pretty format; `app` / `full` stack; `warn` = user/trace id lines from WRN up only |
-| `SKILLLANE_MONITORING_ERRORS_FILE_PATH` | `src/skilllane-monitoring/errors.ts` | the app's error catalog: its source path under `src/`, or the built `.js` |
 | `UNHANDLED_REJECTION` | `exit` | `log` keeps the process alive |
 | `INFLIGHT_HTTP_AFTER_MS` | `1000` | requests longer than this are listed in `job.inflight` |
 | `DEPENDENCY_STILL_DOWN_MS` | `30000` | interval of `dependency.still_down` |
-| `LOG_CAPTURE` / `LOG_BODY_MAX_BYTES` / `LOG_CAPTURE_SKIP_ROUTES` | `all` / `65536` / — | `off` = capture nothing on spans; bytes kept per body; path prefixes whose bodies are not read |
+| `SKILLLANE_MONITORING_ERRORS_FILE_PATH` | `src/skilllane-monitoring/errors.ts` | the app's error catalog: its source path under `src/`, or the built `.js` |
 
-## Field changes from the previous school-core-api logger
+Export (see [Queue export](#queue-export-kafka--rabbitmq--bullmq-or-straight-to-the-engine))
 
-| Old | New |
-| --- | --- |
-| `message: "request middleware"` (2 lines per request) | `event.code: "http.request"` (1 line) |
-| `request_id` | `trace.id` (also the `request-id` header and the error body `requestId`) |
-| `service: "GET /url?query"` | `http.request.method` + `url.path` + `http.route` |
-| `response_code` / `response_time_ms` | `http.response.status_code` / `duration_ms` |
-| `user_id`, `schoolId`, `user_role` | `user.id`, `organization.id`, `user.roles` |
-| `traceId`, `spanId` | `trace.id`, `span.id` |
-| `dbQuery`, `dbDriverError` | `db.statement`, `error.code` (binds are on the db span) |
-| every HttpException at `error` | 4xx `warn`, 5xx `error` |
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `LOG_EXPORT` | from config | `kafka` · `rabbitmq` · `bullmq` · `http` · `otlp` · `stdout` |
+| `LOG_KAFKA_BROKERS` | — | `host:port,host:port` |
+| `LOG_KAFKA_CLIENT_ID` | `skilllane-monitoring-<service>` | kafkajs client id |
+| `LOG_KAFKA_SSL` | off | `true` = TLS |
+| `LOG_KAFKA_SASL_MECHANISM` / `_USERNAME` / `_PASSWORD` | off | `plain` · `scram-sha-256` · `scram-sha-512` |
+| `LOG_RABBITMQ_URL` | — | `amqp://user:pass@host:5672/vhost` |
+| `LOG_RABBITMQ_EXCHANGE` | `skilllane-monitoring.telemetry` | durable direct exchange |
+| `LOG_BULLMQ_REDIS_URL` | — | the queue Redis, not the app's cache |
+| `LOG_BULLMQ_PREFIX` | `bull` | BullMQ key prefix |
+| `LOG_HTTP_URL` | — | the engine's base URL |
+| `LOG_HTTP_TOKEN` | — | only when the engine sets `ENGINE_INGEST_TOKEN` |
+| `LOG_TOPIC_LOGS` | `skilllane-monitoring.logs` | topic / routing key / queue of logs |
+| `LOG_TOPIC_SPANS` | `skilllane-monitoring.spans` | topic / routing key / queue of spans |
+| `OTEL_EXPORTER_ENDPOINT` | — | OTLP Collector, e.g. `http://otel-collector:4318` |
+| `LOG_EXPORT_BATCH_MS` | `1000` | how often a batch is sent |
+| `LOG_EXPORT_BATCH_SIZE` | `500` | items that send a batch at once |
+| `LOG_EXPORT_MAX_QUEUE` | `10000` | items waiting per stream; the oldest are dropped above it |
+| `LOG_EXPORT_MAX_BYTES` | `800000` | max bytes of one message; bigger batches are split |
+| `LOG_EXPORT_MAX_QUEUE_BYTES` | `67108864` (64 MB) | max bytes waiting per stream |
+| `LOG_EXPORT_SHUTDOWN_MS` | `3000` | how long shutdown waits for the exporters |
+
+Pretty and capture
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `LOG_PRETTY` | `false` | readable format for local development |
+| `LOG_STACK` | `off` | pretty only: `app` = our frames, `full` = the whole stack |
+| `LOG_PRETTY_TRACE` | `all` | pretty only: `warn` = user / trace id lines from WRN up only |
+| `LOG_CAPTURE` | `all` | `off` = capture nothing on spans (masking stays) |
+| `LOG_BODY_MAX_BYTES` | `65536` | bytes kept of each body, payload or statement |
+| `LOG_CAPTURE_SKIP_ROUTES` | — | comma-separated path prefixes whose bodies are not read |
 
 ## Development
 
-```sh
-pnpm --filter skilllane-monitoring test
-pnpm --filter skilllane-monitoring build
-```
-
-Error hints live in `src/errors/patterns/` — read its README before adding one.
+See the [repository README](https://github.com/nakarin-skilllane/skilllane-monitoring#readme).
+New built-in hints: `src/errors/patterns/README.md`.
 
 ## The contract: `skilllane-monitoring/contract`
 

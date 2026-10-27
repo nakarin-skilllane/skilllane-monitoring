@@ -6,10 +6,86 @@ One file per source; `index.ts` concatenates them and `../hints.ts` builds the l
 ## Lookup order
 
 1. A hint the developer passed (`{ hint, hintDetail }` or `AppError`) wins.
-2. `(dependency.type, error.code)` — e.g. `(redis, ECONNREFUSED)`.
-3. `error.code` alone.
-4. `messageMatch` — only for errors that carry no code.
-5. Nothing matched → no hint. A missing hint is better than a wrong one.
+2. The app's own catalog (`errors init`, see the package README), by the same
+   steps 3–5. An entry for a built-in code replaces only the fields it sets.
+3. `(dependency.type, error.code)` — e.g. `(redis, ECONNREFUSED)`.
+4. `error.code` alone.
+5. `messageMatch` — only for errors that carry no code.
+6. Nothing matched → no hint. A missing hint is better than a wrong one.
+
+## Example file
+
+The four kinds of entry, taken from the real files:
+
+```ts
+// src/errors/patterns/<source>.ts
+import { quotedColumn } from './explain-helpers'
+import type { ErrorPattern } from './types'
+
+// Where the codes come from (library file, spec section): see the table below.
+export const examplePatterns: ErrorPattern[] = [
+  // 1. A code (smtp.ts)
+  {
+    key: 'EAUTH',
+    hint: 'Wrong SMTP login',
+    hintDetail:
+      'The SMTP server rejected the username/password, or the account is locked. Check mail credentials in env.',
+    category: 'config',
+  },
+  // 2. A code raised by one dependency, with placeholders (redis.ts)
+  {
+    key: 'ECONNREFUSED',
+    dependency: 'redis',
+    hint: '{Type} "{name}" unreachable',
+    hintDetail:
+      'Nothing is listening at {host}:{port}. {Type} may be stopped or restarting, or {env} is wrong.',
+    retryable: true,
+  },
+  // 3. No code: match the message, pull out what to fix (runtime.ts)
+  {
+    key: 'NULL_WRITE',
+    messageMatch: /Cannot set propert(?:y|ies) of (?:undefined|null)/,
+    hint: 'Write to undefined value',
+    hintDetail:
+      'Code set a property (see target) on undefined or null. Create the object first, or check why it was not loaded.',
+    category: 'bug',
+    target: /\(setting '([^']*)'\)|property '([^']*)'/,
+  },
+  // 4. The specific case as error.fix: names and counts, never values (oracle.ts)
+  {
+    key: 'ORA-12899',
+    hint: 'Value too long for column',
+    hintDetail:
+      'A text value exceeds the column size. Common in Excel imports; validate length before saving.',
+    level: 'warn',
+    category: 'data',
+    explain: ({ message, schema }) => {
+      const target = quotedColumn(schema, message) // "APP"."product"."name" → ProductEntity.name
+      const sizes = message.match(/actual: (\d+), maximum: (\d+)/)
+      if (!target) return undefined
+      return {
+        target,
+        fix: sizes
+          ? `${target} got ${sizes[1]} (max ${sizes[2]}). Validate the length in the DTO or import before saving.`
+          : `${target} is too long. Validate the length before saving.`,
+      }
+    },
+  },
+]
+```
+
+Then add `...examplePatterns` to `ALL_PATTERNS` in `index.ts` (a `messageMatch`
+pattern of a library goes before the generic Node/V8 ones: the first match
+wins), a row to the evidence table below, and for `explain` a fixture with the
+library's real message in `test/explain.test.ts`:
+
+```ts
+it('ORA-12899 gives the column, actual and maximum', () => {
+  const line = logged(oracle('ORA-12899: value too large for column "APP"."product"."name" (actual: 312, maximum: 255)'))
+  expect(line['error.fix']).toBe('ProductEntity.name got 312 (max 255). Validate the length in the DTO or import before saving.')
+  expect(line.labels.error_target).toBe('ProductEntity.name')
+})
+```
 
 ## Rules for a new pattern
 
@@ -35,34 +111,34 @@ One file per source; `index.ts` concatenates them and `../hints.ts` builds the l
 
 ## Where each file's codes came from
 
-Two passes: a school-core-api scan (2026-10-06) for the codes the service actually
-throws, then the official code lists of every library (2026-10-20) so the table
-covers what we expect to meet, not only what we have met.
+Two passes: the codes a production NestJS service (Oracle, Redis, Kafka,
+RabbitMQ, S3, Google APIs) actually throws, then the official code list of
+every library, so the table covers what a service is expected to meet.
 
-| File | Evidence |
+| File | Source |
 | --- | --- |
-| `oracle.ts` | `src/common/types/oracle-error-code.ts`, `common/filters/exception.filter.ts:134-185`, `database/database.config.ts:74-82` (pool max 20, queue 500), comments in repositories (ORA-01795, NJS-098, ORA-01722, ORA-00904, ORA-00936, ORA-01407). Then Oracle Database Error Messages (common ORA- codes: connection, PL/SQL, constraints, dates, tablespaces, TNS 12xxx), `node-oracledb/lib/errors.js` (NJS-), ODPI-C (DPI-). |
+| `oracle.ts` | Oracle Database Error Messages (connection, PL/SQL, constraints, dates, tablespaces, TNS 12xxx), `node-oracledb/lib/errors.js` (NJS-), ODPI-C (DPI-) |
 | `postgres.ts` | PostgreSQL errcodes appendix (SQLSTATE classes 08, 22, 23, 25, 28, 3D/3F, 40, 42, 53, 54, 55, 57, XX), node-postgres `client.js` messages |
 | `mysql.ts` | mysql/mysql2 `lib/protocol/constants/errors.js` (ER_ names), client PROTOCOL_* / POOL_* codes |
 | `mongodb.ts` | MongoDB driver error classes, server codes 11000/13/18/50/112/121/251, Mongoose errors |
-| `typeorm.ts` | `findOneOrFail` ×122, query runners/transactions ×318 in school-core-api; TypeORM 0.3 `src/error/*` (every class), QueryBuilder messages |
-| `node-net.ts` | `oracle-iam/oracle-api-error.handler.ts:30-127`, `google/google-api-error.handler.ts:20-24`, `partner-exercise-iframe.adapter.ts:123-124`; nodejs.org/api/errors.html "Common system errors" + ERR_SOCKET_* / ERR_SERVER_* |
+| `typeorm.ts` | TypeORM 0.3 `src/error/*` (every class), QueryBuilder messages |
+| `node-net.ts` | nodejs.org/api/errors.html "Common system errors" + ERR_SOCKET_* / ERR_SERVER_* |
 | `node-tls.ts` | Node ERR_TLS_* / ERR_SSL_* / ERR_OSSL_* / ERR_CRYPTO_*, OpenSSL `crypto/x509/x509_txt.c` (X509_V_ERR names Node copies into `code`) |
 | `node-http.ts` | Node ERR_HTTP_* / ERR_STREAM_*, llhttp HPE_* parser codes |
 | `node-core.ts` | Node ERR_INVALID_ARG_*, ERR_OUT_OF_RANGE, modules (MODULE_NOT_FOUND, ERR_REQUIRE_ESM, ERR_PACKAGE_PATH_NOT_EXPORTED), workers, child processes, ABORT_ERR, DOMException AbortError/TimeoutError |
 | `fetch.ts` | undici `lib/core/errors.js` (UND_ERR_*), node-fetch FetchError types, global fetch "fetch failed" / "terminated" |
-| `redis.ts` | `src/redis/config/redis-connection.constants.ts:3-37` (commandTimeout, maxRetriesPerRequest=5); reply prefixes from `redis/src/server.c` shared replies + cluster spec (MOVED, ASK, TRYAGAIN, CLUSTERDOWN, CROSSSLOT); ioredis `Redis.ts` / `cluster/index.ts` messages |
-| `bullmq.ts` | `common/global-queue/worker-host/worker-host.processor.ts`, `keyed-concurrency-limiter.ts:7`; BullMQ `scripts.ts` finishedErrors, `worker.ts` / `job.ts` messages, `classes/errors/*` |
-| `kafka.ts` | `common/kafka/services/kafka-consumer.service.ts`, `kafka-producer.service.ts:77`, `kafka-publish-timeout.exception.ts`; kafkajs `src/errors.js` (all classes), Kafka `Errors.java` protocol error codes |
-| `rabbitmq.ts` | `common/rabbitMQ/rabbitmq.service.ts:102-152`; AMQP 0-9-1 reply codes (rabbitmq/amqp-0.9.1-spec constants), amqplib `connection.js` / `channel.js` messages |
-| `http.ts` | `thaid.provider.ts`, `oracle-api-error.handler.ts`; axios `AxiosError.js` codes, Node "socket hang up" |
+| `redis.ts` | `redis/src/server.c` shared replies + cluster spec (MOVED, ASK, TRYAGAIN, CLUSTERDOWN, CROSSSLOT); ioredis `Redis.ts` / `cluster/index.ts` messages |
+| `bullmq.ts` | BullMQ `scripts.ts` finishedErrors, `worker.ts` / `job.ts` messages, `classes/errors/*` |
+| `kafka.ts` | kafkajs `src/errors.js` (all classes), Kafka `Errors.java` protocol error codes |
+| `rabbitmq.ts` | AMQP 0-9-1 reply codes (rabbitmq/amqp-0.9.1-spec constants), amqplib `connection.js` / `channel.js` messages |
+| `http.ts` | axios `AxiosError.js` codes, Node "socket hang up" |
 | `ldap.ts` | ldapts error classes (one per LDAP result code, RFC 4511) |
-| `google.ts` | `google-api-error.handler.ts:45-214`, `google-rate-limit.service.ts:91-108`, `login-with-google-callback.handler.ts:125`; Drive / Calendar "Resolve errors" pages, OAuth 2.0 web-server error codes, google.rpc.Code status names |
-| `s3.ts` | `common/service/storage-v2/providers/aws.provider.ts:96,133-770`; S3 API ErrorResponses code list, AWS SDK v3 / STS client errors |
-| `smtp.ts` | `common/service/email/email.service.ts:67-99`; nodemailer error codes, RFC 5321 §4.2.3 reply codes, RFC 4954 (530/534/535/538) |
-| `nest-http.ts` | Throw counts: BadRequest 1,038 · NotFound 631 · Forbidden 270 · InternalServerError 228 · Conflict 204; one entry per built-in HttpException class |
+| `google.ts` | Drive / Calendar "Resolve errors" pages, OAuth 2.0 web-server error codes, google.rpc.Code status names |
+| `s3.ts` | S3 API ErrorResponses code list, AWS SDK v3 / STS client errors |
+| `smtp.ts` | nodemailer error codes, RFC 5321 §4.2.3 reply codes, RFC 4954 (530/534/535/538) |
+| `nest-http.ts` | one entry per built-in Nest HttpException class |
 | `nest-core.ts` | `@nestjs/core/errors/messages.ts` (DI, module, route errors), @nestjs/graphql and @nestjs/swagger type reflection messages |
 | `http-body.ts` | body-parser / raw-body error `type` values, multer `multer-error.js` codes, busboy messages |
 | `browser.ts` | Puppeteer / Playwright navigation, target and launch messages, Chromium net::ERR_* |
 | `runtime.ts` | V8 TypeError / ReferenceError / RangeError / SyntaxError messages (bugs in our code), heap OOM text |
-| `app.ts` | `auth.service.ts:91-99` (JWT), `exception.filter.ts` errorCodes, Excel import errorCodes; jsonwebtoken `verify.js` messages, validation libraries (Joi/Yup/Mongoose ValidationError, ZodError, CastError) |
+| `app.ts` | jsonwebtoken `verify.js` messages, validation libraries (Joi/Yup/Mongoose ValidationError, ZodError, CastError), common app `errorCode` values (duplicate, busy, file import) |

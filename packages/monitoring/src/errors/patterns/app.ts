@@ -67,8 +67,8 @@ function explainJwt({ message }: { message: string }) {
   return undefined
 }
 
-// Framework errors (JWT, JSON, validation libraries) and the errorCode values
-// school-core-api throws most.
+// Framework errors (JWT, JSON, validation libraries) and common app errorCode
+// values (duplicate, busy, file import).
 export const appPatterns: ErrorPattern[] = [
   {
     key: 'TokenExpiredError',

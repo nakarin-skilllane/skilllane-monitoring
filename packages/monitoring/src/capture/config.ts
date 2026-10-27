@@ -77,7 +77,7 @@ export function chainHooks(
 const TYPEORM = 'opentelemetry-instrumentation-typeorm'
 
 /**
- * TypeORM spans (the app's TypeormInstrumentation, school-core-api): with
+ * TypeORM spans (a TypeormInstrumentation the app passes): with
  * `collectParameters` its query-builder spans carry the bind values
  * (`db.statement.parameters`, masked and moved by the processor).
  */

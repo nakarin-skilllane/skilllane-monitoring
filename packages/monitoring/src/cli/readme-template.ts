@@ -21,7 +21,7 @@ SDK อ่านไฟล์นี้เองตอนแอป start (ไม�
 1. เติม \`hint\` / \`hintDetail\` ให้ code ใน \`${file}\` (รายการที่ \`hint\` ว่างถูกข้าม ใช้งานได้ทันทีแม้ยังเติมไม่ครบ)
 2. โค้ดเดิมไม่ต้องแก้: error ที่มี code ตรงกับตารางได้ hint อัตโนมัติ
    \`\`\`ts
-   throw new StudentRetiredException()                       // errorCode = 'STUDENT_LEAVE_SCHOOL'
+   throw new OrderAlreadyPaidException()                     // errorCode = 'ORDER_ALREADY_PAID'
    this.logger.error('Import failed', { code: 'E1001' })     // บันทึกโดยไม่ throw
    \`\`\`
 3. code อยู่ช่องอื่นของ error (หรือเป็นตัวเลข) ให้เปิด \`codeOf\` ในไฟล์ เช่น \`codeOf: (err) => err.errorCode\`
@@ -37,7 +37,9 @@ SDK อ่านไฟล์นี้เองตอนแอป start (ไม�
 | \`hintDetail\` | ≤ 200 ตัวอักษร สาเหตุที่น่าจะเป็น + สิ่งที่ควรเช็ก | ยาวเกิน = ตัดแล้วต่อ \`…\` |
 | \`category\` | \`bug\` \`input\` \`data\` \`dependency\` \`config\` (ใครต้องแก้) | ค่าอื่น = ไม่ใช้ช่องนี้ |
 | \`level\` | \`warn\` (ความผิดฝั่งผู้เรียก) หรือ \`error\` · request ที่ตอบ 5xx เป็น error เสมอ | ค่าอื่น = ไม่ใช้ช่องนี้ |
+| \`dependency\` | \`redis\` \`oracle\` \`kafka\` \`rabbitmq\` \`smtp\` \`http\` \`s3\` \`google\` | ค่าอื่น = ไม่ใช้ช่องนี้ |
 | \`messageMatch\` | RegExp | ไม่ใช่ RegExp = ไม่ใช้ช่องนี้ |
+| key | \`[A-Z0-9_.-]+\` | ใช้ได้ แค่เตือนใน \`errors check\` |
 | ทุกช่อง | ห้ามใส่ข้อมูลส่วนบุคคล | ตรวจอัตโนมัติไม่ได้ |
 
 ใส่ผิดกฎแล้วแอป**ไม่ล้ม** ตอน start จะมี warn 1 บรรทัดบอกว่าปรับอะไรไป
@@ -58,7 +60,9 @@ ${pathSetup}
 \`\`\`
 custom error catalog: 26 codes from src/common/config/monitoring-errors.ts (/app/dist/common/config/monitoring-errors.js)
 custom error catalog: not found
-custom error catalog: failed to load <path>
+custom error catalog: failed to load <path>                  (reason บอกเหตุผล ใช้ตารางในตัวต่อ)
+custom error catalog: N entries adjusted                    (ใส่ผิดกฎ reason บอกรายการ)
+custom error catalog: more than one file found; the first is used
 \`\`\`
 
 ## ข้อจำกัด

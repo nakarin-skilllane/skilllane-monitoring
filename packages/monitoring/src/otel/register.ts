@@ -161,8 +161,8 @@ export function instrumentationConfig(
       merged[name].ignoreIncomingRequestHook = (req: any) =>
         ignore(req) || appIgnore(req)
     }
-    // The capture's hooks and the app's both run (school-core-api passes
-    // its own http requestHook / responseHook).
+    // The capture's hooks and the app's both run (an app may pass its own
+    // http requestHook / responseHook).
     for (const hook of HOOK_NAMES) {
       const ours = base[hook]
       const theirs = (override as Record<string, unknown>)?.[hook]

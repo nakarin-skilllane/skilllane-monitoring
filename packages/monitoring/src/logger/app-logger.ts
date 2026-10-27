@@ -28,7 +28,7 @@ import { recordSink } from './sink'
 import { createJsonWriter, createPrettyWriter, type LineWriter } from './writer'
 
 export interface LoggerConfig {
-  /** e.g. 'school-core-api'. */
+  /** e.g. 'orders-api'. */
   service: string
   /** APP_ROLE; appended as service.name = `${service}/${role}`. */
   role?: string
