@@ -35,7 +35,6 @@ LOG_PRETTY=true                       # dev เท่านั้น
 | การต่อ service, env ทุกตัว, hint, dependency, queue, capture, masking, CLI | [packages/monitoring/README.md](packages/monitoring/README.md) |
 | ตาราง error ของโปรเจค (`errors init` / `check` / `uninstall`) | [docs/project-error-catalog.md](docs/project-error-catalog.md) |
 | กติกาเพิ่ม hint ในตัว SDK | [packages/monitoring/src/errors/patterns/README.md](packages/monitoring/src/errors/patterns/README.md) |
-| ย้ายจาก logger เดิมของ school-core-api (field เดิม → field ใหม่) | [docs/migrating-from-the-school-core-api-logger.md](docs/migrating-from-the-school-core-api-logger.md) |
 | สเปก wire format และ engine | `SPEC.md` ใน repo `skilllane-monitoring-engine` |
 
 ## พัฒนา SDK
