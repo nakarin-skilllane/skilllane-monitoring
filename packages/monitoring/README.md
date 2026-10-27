@@ -268,7 +268,7 @@ Pretty and capture
 ## Development
 
 See the [repository README](https://github.com/nakarin-skilllane/skilllane-monitoring#readme).
-New built-in hints: `src/errors/patterns/README.md`.
+To add or change a hint for an app, use its catalog ([`errors init`](#the-apps-own-error-codes-errors-init)).
 
 ## The contract: `skilllane-monitoring/contract`
 
