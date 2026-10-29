@@ -34,11 +34,23 @@ Business code keeps `new Logger(Class.name)`:
 
 ```ts
 this.logger.error('Failed to load the sales report', err)
-this.logger.error('Failed to import a price row', { code: 'PRICE_OUT_OF_RANGE', hint: 'Price out of range' })
-this.logger.warn('Authentication rejected', { event: 'auth.rejected', reason: 'token_expired' })
+this.logger.error(ErrorCode.smtp.ECONNECTION)                                   // message = its hint
+this.logger.error('Send welcome mail failed', err, ErrorCode.smtp.ECONNECTION, {
+  howToFix: 'Check MAIL_HOST in the mail service env.',                       // replaces only this field
+})
+this.logger.warn('Import failed', { code: AppErrorCode.PRICE_OUT_OF_RANGE, level: 'error' })
+throw new AppError(ErrorCode.redis.ECONNREFUSED, 'Cache is down', { status: 503 })
 await tracked('cache:rebuild_product_list', () => this.rebuild())
-throw new AppError('PRICE_OUT_OF_RANGE', 'Price out of range', { hint: '…', cause: err })
 ```
+
+`ErrorCode.<file>.<CODE>` lists every built-in code (`ORA-00001` is
+`ErrorCode.oracle.ORA_00001`). A plain object next to a code, or one with
+`code`, may set `message`, `hint`, `detail`, `howToFix`, `category`, `level`,
+`target`, `labels`; each field left out comes from the app's catalog, then the
+built-in table. Without a message the line reads as its hint. `level` given
+here is final. `AppError` takes the same fields and `status` (the HTTP status
+Nest answers with; its message goes to the client). A line with a code and no
+error names the function that logged it in `log.origin.*`.
 
 ## Where to fix it
 
@@ -50,11 +62,12 @@ throw new AppError('PRICE_OUT_OF_RANGE', 'Price out of range', { hint: '…', ca
 | `labels.error_target` | `id`, `APP.UQ_PRODUCT_SKU` | property, constraint or column named in the message |
 | `labels.failed_step` | `oracle INSERT PRODUCT` | last outgoing call that failed (needs OTel) |
 | `labels.error_category` | `bug` · `input` · `data` · `dependency` · `config` | who has to act |
-| `error.fix` | `ProductEntity.name got 312 (max 255). …` | this specific case; shown instead of `hint_detail` in pretty |
+| `error.detail` | `ProductEntity.name got 312 (max 255).` | what happened: this case when the pattern can tell, else the kind's constant sentence |
+| `error.how_to_fix` | `Validate the length of name before saving, or widen the column.` | what to do |
 
-`error.hint` is constant per kind of error (group and alert on it); `error.fix`
-and `error_target` hold names and counts, never row values — those are on the
-spans, masked. With the TypeORM `DataSource` as `schema`, database names
+`error.hint` is constant per kind of error (group and alert on it);
+`error.detail`, `error.how_to_fix` and `error_target` hold names and counts,
+never row values — those are on the spans, masked. With the TypeORM `DataSource` as `schema`, database names
 (including hash names like `FK_9aac0395…`) appear as `Entity.property`.
 
 ## The app's own error codes: `errors init`
@@ -191,7 +204,9 @@ JSON with the same fields.
 14:03:40.517 ERR orders-api/api  read from undefined value
     method=POST path=/orders/:id/discount
     file=src/orders/apply-discount.handler.ts duration=31ms
-    error detail: the object holding .percent was undefined; …
+    error code:   NULL_READ
+    error detail: The object holding .percent was undefined: …
+    how to fix:   Guard it before reading .percent.
     actual error: TypeError: Cannot read properties of undefined (reading 'percent')
     user id:      u_2201
     trace id:     a3ce929d0e0e47364bf92f3577b34da6
@@ -205,8 +220,9 @@ JSON with the same fields.
   where (`file target reason dlq affects retry port`), `duration` last. `path`
   is the route pattern; `duration` inside a request/job without one is the time
   since it started.
-- Then `error detail:` (`error.fix`, else `error.hint_detail`), `actual error:`,
-  `stack:` (`LOG_STACK`), `user id:`, `trace id:` — only those with a value.
+- Then `error code:`, `error detail:` (`error.detail`), `how to fix:`
+  (`error.how_to_fix`), `actual error:`, `stack:` (`LOG_STACK`), `user id:`,
+  `trace id:` — only those with a value.
 - Entries with more than one line are separated by a blank line; colours only
   on a TTY without `NO_COLOR`.
 

@@ -1,3 +1,6 @@
+import type { ErrorCodeRef } from './errors/error-code'
+import type { ErrorCategory } from './errors/patterns/types'
+
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'fatal'] as const
 export type LogLevel = (typeof LOG_LEVELS)[number]
 
@@ -26,9 +29,35 @@ export type DependencyType =
 export interface LogOptions {
   event?: string
   code?: string
+  /** Picks the dependency-scoped pattern of the code (ErrorCode.redis.…). */
+  dependency?: DependencyType
   hint?: string
-  hintDetail?: string
+  detail?: string
+  howToFix?: string
+  category?: ErrorCategory
+  /** Final level of the line: no warn downgrade, never held for the status. */
+  level?: 'warn' | 'error'
+  target?: string
   reason?: string
+}
+
+/**
+ * What a call may set on top of the hint table, in a plain object next to an
+ * ErrorCode or in an object with `code`. Every field left out still comes
+ * from the table. Use with `satisfies LogOverrides` for type checks.
+ */
+export interface LogOverrides {
+  message?: string
+  code?: string | ErrorCodeRef
+  hint?: string
+  detail?: string
+  howToFix?: string
+  category?: ErrorCategory
+  level?: 'warn' | 'error'
+  target?: string
+  labels?: Record<string, string | number | boolean>
+  reason?: string
+  event?: string
 }
 
 /**
@@ -67,8 +96,8 @@ export const ALLOWED_FIELDS = new Set<string>([
   'error.message',
   'error.code',
   'error.hint',
-  'error.hint_detail',
-  'error.fix',
+  'error.detail',
+  'error.how_to_fix',
   'log.origin.function',
   'log.origin.file.name',
   'error.stack_trace',

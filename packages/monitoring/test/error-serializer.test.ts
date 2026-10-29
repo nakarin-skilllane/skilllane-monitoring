@@ -4,6 +4,7 @@ import { ReplyError } from 'ioredis'
 import { KafkaJSConnectionError, KafkaJSProtocolError } from 'kafkajs'
 import { describe, expect, it } from 'vitest'
 import { AppError } from '../src/errors/app-error'
+import { ErrorCode } from '../src/errors/error-codes'
 import { serializeError } from '../src/errors/error-serializer'
 import { originOf, sourcePath } from '../src/errors/origin'
 
@@ -263,5 +264,35 @@ describe('originOf', () => {
     expect(
       originOf('Error: x\n    at f (/app/node_modules/typeorm/q.js:1:1)'),
     ).toBeUndefined()
+  })
+})
+
+describe('words carried by an error', () => {
+  it('reads them from an AppError', () => {
+    const err = new AppError(ErrorCode.redis.ECONNREFUSED, 'cache down', {
+      howToFix: 'Start Redis.',
+      category: 'config',
+      level: 'warn',
+      status: 503,
+    })
+    expect(serializeError(err)).toMatchObject({
+      code: 'ECONNREFUSED',
+      codeDependency: 'redis',
+      howToFix: 'Start Redis.',
+      category: 'config',
+      level: 'warn',
+      status: 503,
+    })
+  })
+
+  it('ignores hint and detail on other errors (a Postgres error has both)', () => {
+    const pg = Object.assign(new Error('duplicate key value'), {
+      code: '23505',
+      hint: 'Try another value.',
+      detail: 'Key (email)=(a@b.c) already exists.',
+    })
+    const serialized = serializeError(pg)
+    expect(serialized.hint).toBeUndefined()
+    expect(serialized.detail).toBeUndefined()
   })
 })

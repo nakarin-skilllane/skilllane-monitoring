@@ -8,7 +8,8 @@ const RULES = `/*
  *  - key: the app's error code (string or number), or a name for messageMatch entries
  *  - hint: ≤ 30 characters (≤ 40 with dependency), English, constant: it groups errors,
  *          so never put changing values in it. Required: entries without a hint are skipped.
- *  - hintDetail: ≤ 200 characters: likely causes and what to check
+ *  - detail: ≤ 200 characters: what probably happened
+ *  - howToFix: ≤ 200 characters: what to do about it
  *  - category: bug | input | data | dependency | config   (who has to act)
  *  - level: warn | error   (warn for the caller's mistakes; a 5xx response still logs error)
  *  - messageMatch: RegExp for errors that carry no code
@@ -43,21 +44,27 @@ export function renderCatalogFile(scan: ScanResult): string {
   const lines: string[] = []
   for (const code of [...scan.errorCodes, ...scan.loggerCodes]) {
     const key = /^[A-Za-z_][A-Za-z0-9_]*$/.test(code) ? code : `'${code}'`
-    lines.push(`      ${key}: { hint: '', hintDetail: '' },`)
+    lines.push(`  ${key}: { hint: '', detail: '', howToFix: '' },`)
   }
   for (const { message, count } of scan.repeatedMessages) {
     const name = constantName(message, used)
     lines.push(
-      `      ${name}: { messageMatch: /^${escapeRegExp(message)}$/, hint: '', hintDetail: '' }, // seen ${count} times`,
+      `  ${name}: { messageMatch: /^${escapeRegExp(message)}$/, hint: '', detail: '', howToFix: '' }, // seen ${count} times`,
     )
   }
-  return `${RULES}export default {
+  return `${RULES}const catalog = {
+${lines.join('\n')}
+}
+
+/** The codes above as constants: throw new AppError(AppErrorCode.X, …), this.logger.error('…', { code: AppErrorCode.X }). */
+export const AppErrorCode = {} as { [K in keyof typeof catalog as \`\${K & (string | number)}\`]: \`\${K & (string | number)}\` }
+for (const code of Object.keys(catalog)) (AppErrorCode as Record<string, string>)[code] = code
+
+export default {
   errors: {
     // Where the app keeps its code on an error. Unset: the SDK reads err.code and Nest's errorCode.
     // codeOf: (err: any) => err.errorCode,
-    catalog: {
-${lines.join('\n')}
-    },
+    catalog,
   },
 }
 `

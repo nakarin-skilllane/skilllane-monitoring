@@ -40,8 +40,11 @@ function functionName(name: string): string | undefined {
   return cleaned.replace(/^Object\./, '')
 }
 
-/** The first stack frame in our code: not node_modules, node: or internal. */
-export function originOf(stack: string | undefined): ErrorOrigin | undefined {
+/** The first stack frame in our code: not node_modules, node:, internal, or `skip`. */
+export function originOf(
+  stack: string | undefined,
+  skip?: (file: string) => boolean,
+): ErrorOrigin | undefined {
   if (!stack) return undefined
   for (const line of stack.split('\n').slice(1)) {
     const trimmed = line.trim()
@@ -50,7 +53,7 @@ export function originOf(stack: string | undefined): ErrorOrigin | undefined {
     const named = trimmed.match(/^at\s+(.*?)\s+\((.*):\d+:\d+\)$/)
     const bare = named ? undefined : trimmed.match(/^at\s+(.*):\d+:\d+$/)
     const file = named?.[2] ?? bare?.[1]
-    if (!file || isLibraryFile(file)) continue
+    if (!file || isLibraryFile(file) || skip?.(file)) continue
     return {
       function: named ? functionName(named[1]) : undefined,
       file: sourcePath(file),

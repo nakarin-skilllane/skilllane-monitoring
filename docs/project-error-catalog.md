@@ -1,6 +1,7 @@
 # ตาราง error ของโปรเจค (project error catalog)
 
 ตั้งแต่ `skilllane-monitoring` 0.4.0 แอปสอน logger ให้รู้จัก error code ของตัวเองได้จากไฟล์เดียว
+(`detail` / `howToFix` ตั้งแต่ 0.5.0 ส่วน 0.4 ใช้ `hintDetail` ช่องเดียว)
 hint, คำอธิบาย, ใครต้องแก้ และระดับของ error เหล่านั้นจะขึ้นใน log และหน้า monitor โดยไม่ต้องแก้วิธี throw ที่มีอยู่
 
 ## เริ่มใช้
@@ -20,36 +21,50 @@ pnpm skilllane-monitoring errors init
 
 ```ts
 // src/skilllane-monitoring/errors.ts
+const catalog = {
+  ORDER_ALREADY_PAID: {
+    hint: 'Order already paid',
+    detail: 'The order was paid before.',
+    howToFix: 'Check the payment status before charging again.',
+    category: 'input',
+    level: 'warn',
+  },
+  1701: { hint: 'Coupon expired', detail: 'The coupon is past its end date.', howToFix: 'Ask the user for another coupon.', category: 'input' },
+  'ORA-00001': { hint: 'Duplicate product SKU' },                                             // ทับ hint ของตารางในตัว
+  USER_NOT_FOUND: { messageMatch: /^User not found$/, hint: 'User not found', category: 'input', level: 'warn' },  // error ที่ไม่มี code
+}
+
+// code ข้างบนเป็นค่าคงที่: throw new AppError(AppErrorCode.ORDER_ALREADY_PAID, …)
+export const AppErrorCode = {} as { [K in keyof typeof catalog as `${K & (string | number)}`]: `${K & (string | number)}` }
+for (const code of Object.keys(catalog)) (AppErrorCode as Record<string, string>)[code] = code
+
 export default {
   errors: {
     // code ของแอปอยู่ช่องไหนของ error (ไม่ใส่ = err.code และ errorCode ของ exception ของ Nest)
     codeOf: (err: any) => err.errorCode,
-    catalog: {
-      ORDER_ALREADY_PAID: { hint: 'Order already paid', hintDetail: 'The order was paid before; check the payment status.', category: 'input', level: 'warn' },
-      1701: { hint: 'Coupon expired', hintDetail: 'The coupon is past its end date.', category: 'input' },
-      'ORA-00001': { hint: 'Duplicate product SKU' },                                             // ทับ hint ของตารางในตัว
-      USER_NOT_FOUND: { messageMatch: /^User not found$/, hint: 'User not found', category: 'input', level: 'warn' },  // error ที่ไม่มี code
-    },
+    catalog,
   },
 }
 ```
 
-ไฟล์นี้ไม่มีใคร import และไม่ import อะไรจาก SDK: SDK หาและโหลดเองตอนแอป start
+SDK หาและโหลดไฟล์นี้เองตอนแอป start (ไม่ต้องลงทะเบียนหรือ import) และไฟล์ไม่ import อะไรจาก SDK · โค้ดของแอป import `AppErrorCode` จากไฟล์นี้ได้ (path สัมพัทธ์จากไฟล์ที่ import เช่น `import { AppErrorCode } from './skilllane-monitoring/errors'`)
 
 ## ทำงานอย่างไร
 
 - **โค้ดเดิมไม่ต้องแก้** error ที่มี code ตรงกับตารางได้ hint อัตโนมัติ ทั้งที่ throw (`throw new OrderAlreadyPaidException()`) และที่บันทึกเอง (`this.logger.error('Import failed', { code: 'E1001' })`)
+- **ใช้ code เป็นค่าคงที่:** `AppErrorCode.ORDER_ALREADY_PAID` (ไฟล์ที่สร้างก่อน 0.5 เพิ่มเองได้ตามตัวอย่าง) และ code ในตัว SDK ใช้ `ErrorCode.<file>.<CODE>`
 - **ลำดับหา hint:** hint ที่ส่งมากับ error เอง → ตารางของโปรเจค → ตารางในตัว package → ไม่มี hint
 - **code เป็นตัวเลขหรืออยู่ช่องอื่น:** ใส่ `codeOf` เช่น `(err) => err.errorCode`
 - **error ที่ไม่มี code** (เช่น `NotFoundException('User not found')`): ใช้ `messageMatch` แล้ว `error.code` ของบรรทัดนั้นจะเป็นชื่อ key แทน `HTTP_404`
-- **ทับ code ของตารางในตัว** (เช่น `ORA-00001`): ใส่แค่ `hint` ส่วนที่ไม่ได้ใส่ (คำอธิบาย, category, level) และ `error.fix` / `error_target` ยังมาจากตารางในตัว
+- **ทับ code ของตารางในตัว** (เช่น `ORA-00001`): ใส่แค่ `hint` ส่วนที่ไม่ได้ใส่ (`detail`, `howToFix`, category, level) คำอธิบายเฉพาะกรณี และ `error_target` ยังมาจากตารางในตัว
 
 ## กฎ และผลเมื่อใส่ผิด
 
 | ช่อง | กฎ | ใส่ผิดแล้ว |
 |---|---|---|
 | `hint` | ≤ 30 ตัวอักษร (≤ 40 เมื่อมี `dependency`) ภาษาอังกฤษ คงที่ ห้ามใส่ค่าที่เปลี่ยน (ใช้จัดกลุ่ม error) | ว่าง = ข้ามรายการ · ยาวเกิน = ตัดแล้วต่อ `…` |
-| `hintDetail` | ≤ 200 ตัวอักษร สาเหตุที่น่าจะเป็น + สิ่งที่ควรเช็ก | ยาวเกิน = ตัดแล้วต่อ `…` |
+| `detail` | ≤ 200 ตัวอักษร เกิดอะไรขึ้น (สาเหตุที่น่าจะเป็น) | ยาวเกิน = ตัดแล้วต่อ `…` |
+| `howToFix` | ≤ 200 ตัวอักษร ต้องทำอะไร | ยาวเกิน = ตัดแล้วต่อ `…` |
 | `category` | `bug` · `input` · `data` · `dependency` · `config` | ค่าอื่น = ไม่ใช้ช่องนี้ |
 | `level` | `warn` (ความผิดฝั่งผู้เรียก) หรือ `error` · request ที่ตอบ 5xx เป็น error เสมอ | ค่าอื่น = ไม่ใช้ช่องนี้ |
 | `dependency` | `redis` · `oracle` · `kafka` · `rabbitmq` · `smtp` · `http` · `s3` · `google` | ค่าอื่น = ไม่ใช้ช่องนี้ |
@@ -99,7 +114,7 @@ SKILLLANE_MONITORING_ERRORS_FILE_PATH=src/common/config/monitoring-errors.ts
 - ไฟล์ต้อง build เป็น CommonJS (ค่าปกติของ NestJS) ไฟล์แบบ ES module โหลดไม่ได้ (`failed to load` พร้อม `ERR_REQUIRE_ESM`)
 - `outDir` ของ tsconfig ที่ไม่ใช่ `dist` ให้ตั้ง `SKILLLANE_MONITORING_ERRORS_FILE_PATH` เป็น path ของไฟล์ `.js` ที่ build แล้ว
 - ไฟล์ต้องอยู่ใต้ `src/` และอยู่ใน `include` ของ tsconfig ไม่อย่างนั้นไม่มีไฟล์ `.js` ให้โหลด
-- ยังกำหนด `error.fix` / `explain` และ adapter ของโปรเจคจากตารางนี้ไม่ได้
+- ยังกำหนดคำอธิบายเฉพาะกรณี (`explain`) และ adapter ของโปรเจคจากตารางนี้ไม่ได้
 - โหลดครั้งเดียวตอน start แก้ไฟล์แล้วต้อง build และ restart แอป
 
 ## ถอดออก
@@ -113,4 +128,4 @@ pnpm skilllane-monitoring uninstall          # ถามยืนยันก่
 3. ถาม `Continue? (y/N)` ตอบอย่างอื่น = ไม่แก้อะไร
 4. ลบไฟล์และบรรทัด แล้วรัน `pnpm remove skilllane-monitoring` (เลือก pnpm / yarn / npm ตาม lockfile)
 
-pnpm และ npm ไม่ให้ package ลบไฟล์เองตอนถูกถอด ถ้าถอดด้วย `pnpm remove skilllane-monitoring` ตรง ๆ โฟลเดอร์ `src/skilllane-monitoring/` จะค้าง (ไม่ทำให้ build พัง เพราะไม่มีใคร import) ลบเองได้
+pnpm และ npm ไม่ให้ package ลบไฟล์เองตอนถูกถอด ถ้าถอดด้วย `pnpm remove skilllane-monitoring` ตรง ๆ โฟลเดอร์ `src/skilllane-monitoring/` จะค้าง (ไม่ทำให้ build พัง เพราะไฟล์ไม่ import อะไรจาก SDK) ลบเองได้

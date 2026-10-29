@@ -1,4 +1,5 @@
 import { Logger, NotFoundException } from '@nestjs/common'
+import { AppError } from '../src/errors/app-error'
 import { afterEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
@@ -61,14 +62,16 @@ describe('AppLogger through the Nest Logger', () => {
       {
         code: 'SCORE_OUT_OF_RANGE',
         hint: 'Score out of range',
-        hintDetail: 'Max is 100',
+        detail: 'The score is above the maximum.',
+        howToFix: 'Keep scores between 0 and 100.',
       },
       'Import',
     )
     expect(lastLine(lines)).toMatchObject({
       'error.code': 'SCORE_OUT_OF_RANGE',
       'error.hint': 'Score out of range',
-      'error.hint_detail': 'Max is 100',
+      'error.detail': 'The score is above the maximum.',
+      'error.how_to_fix': 'Keep scores between 0 and 100.',
     })
   })
 
@@ -124,6 +127,19 @@ describe('AppLogger through the Nest Logger', () => {
       'log.level': 'info',
       message: 'Dependency is back up',
     })
+  })
+})
+
+describe('level of an AppError', () => {
+  it('does not change the level of an SDK event line', () => {
+    const { logger, lines } = captureLogger({ level: 'error' })
+    logger.event({
+      event: 'app.uncaught_exception',
+      logger: 'Process',
+      error: new AppError('X', 'boom', { level: 'warn' }),
+    })
+    expect(lines).toHaveLength(1)
+    expect(lastLine(lines)['log.level']).toBe('fatal')
   })
 })
 

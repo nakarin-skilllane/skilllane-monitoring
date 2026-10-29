@@ -50,7 +50,7 @@ const examples = {
       'event.code': 'app.log',
       message: 'Bad Request Exception',
       'error.hint': 'Invalid request body',
-      'error.fix': 'quantity must be ≥ 1; shippingAddress.zip is required',
+      'error.detail': 'quantity must be ≥ 1; shippingAddress.zip is required',
       'http.request.method': 'POST',
       'http.route': '/orders',
       'http.response.status_code': 400,
@@ -67,8 +67,10 @@ const examples = {
       'event.code': 'app.log',
       message: "Cannot read properties of undefined (reading 'percent')",
       'error.hint': 'Read from undefined value',
-      'error.fix':
-        'the object holding .percent was undefined; the coupon may not exist, check before reading .percent',
+      'error.code': 'NULL_READ',
+      'error.detail':
+        'the object holding .percent was undefined; the coupon may not exist',
+      'error.how_to_fix': 'check the coupon exists before reading .percent',
       'error.type': 'TypeError',
       'error.message':
         "Cannot read properties of undefined (reading 'percent')",
@@ -98,8 +100,8 @@ const examples = {
     'dependency.host': 'kafka-0.kafka',
     'dependency.port': 9092,
     'error.hint': 'Kafka not reachable',
-    'error.hint_detail':
-      'cannot connect to the Kafka broker; check broker status and KAFKA_BROKERS',
+    'error.detail': 'cannot connect to the Kafka broker',
+    'error.how_to_fix': 'check broker status and KAFKA_BROKERS',
     'error.type': 'KafkaJSConnectionError',
     'error.message': 'Connection error: connect ECONNREFUSED 10.0.4.12:9092',
   }),
@@ -117,7 +119,7 @@ const examples = {
     'url.domain': 'api.paygate.example',
     duration_ms: 10000,
     'error.hint': 'Payment API not responding',
-    'error.hint_detail':
+    'error.detail':
       'no reply within 10s; the provider may be down, orders will retry automatically',
     'error.type': 'AxiosError',
     'error.code': 'ETIMEDOUT',
@@ -159,8 +161,9 @@ const examples = {
       'job.attempt': 5,
       'job.max_attempts': 5,
       dlq: 'order-events.dlq',
-      'error.hint_detail':
-        'two operations locked each other; usually solved by retry, if frequent review the order of updates',
+      'error.detail': 'two operations locked each other',
+      'error.how_to_fix':
+        'usually solved by retry; if frequent, review the order of updates',
       'error.type': 'QueryFailedError',
       'error.message': 'deadlock detected',
       'trace.id': '0a8d4f21b6e7c3d2a1f09e885ca13e9b',
@@ -205,7 +208,9 @@ describe('pretty format', () => {
       14:03:40.517 ERR school-core-api/api  read from undefined value
           method=POST path=/orders/:id/discount
           file=src/orders/apply-discount.handler.ts duration=31ms
-          error detail: the object holding .percent was undefined; the coupon may not exist, check before reading .percent
+          error code:   NULL_READ
+          error detail: the object holding .percent was undefined; the coupon may not exist
+          how to fix:   check the coupon exists before reading .percent
           actual error: TypeError: Cannot read properties of undefined (reading 'percent')
           user id:      u_2201
           trace id:     a3ce929d0e0e47364bf92f3577b34da6
@@ -213,14 +218,16 @@ describe('pretty format', () => {
       14:04:50.100 ERR school-core-api/worker  kafka not reachable
           source=kafka
           target=kafka-0.kafka:9092
-          error detail: cannot connect to the Kafka broker; check broker status and KAFKA_BROKERS
+          error detail: cannot connect to the Kafka broker
+          how to fix:   check broker status and KAFKA_BROKERS
           actual error: KafkaJSConnectionError: Connection error: connect ECONNREFUSED 10.0.4.12:9092
 
       14:05:02.093 ERR school-core-api/worker  payment API not responding
           source=bullmq job=charge-order id=88412 attempt=2/5
           target=api.paygate.example duration=10.0s
+          error code:   ETIMEDOUT
           error detail: no reply within 10s; the provider may be down, orders will retry automatically
-          actual error: AxiosError [ETIMEDOUT] timeout of 10000ms exceeded
+          actual error: AxiosError: timeout of 10000ms exceeded
           trace id:     e7c3d2a1f09e885ca13e9b0a8d4f21b6
 
       14:05:20.100 WRN school-core-api/api  redis "cache" still down
@@ -232,7 +239,8 @@ describe('pretty format', () => {
       14:06:10.517 ERR school-core-api/worker  message moved to dlq
           source=kafka job=order-events id=p3-o88214 attempt=5/5
           dlq=order-events.dlq duration=2.4s
-          error detail: two operations locked each other; usually solved by retry, if frequent review the order of updates
+          error detail: two operations locked each other
+          how to fix:   usually solved by retry; if frequent, review the order of updates
           actual error: QueryFailedError: deadlock detected
           trace id:     0a8d4f21b6e7c3d2a1f09e885ca13e9b
       "
@@ -292,16 +300,18 @@ describe('pretty format', () => {
     expect(
       formatPretty(examples.nullRead, { stack: 'app' }),
     ).toMatchInlineSnapshot(`
-        "14:03:40.517 ERR school-core-api/api  read from undefined value
-            method=POST path=/orders/:id/discount
-            file=src/orders/apply-discount.handler.ts duration=31ms
-            error detail: the object holding .percent was undefined; the coupon may not exist, check before reading .percent
-            actual error: TypeError: Cannot read properties of undefined (reading 'percent')
-            stack:        at ApplyDiscountHandler.execute (src/orders/apply-discount.handler.ts)
-                          at OrdersController.discount (src/orders/orders.controller.ts)
-            user id:      u_2201
-            trace id:     a3ce929d0e0e47364bf92f3577b34da6"
-      `)
+      "14:03:40.517 ERR school-core-api/api  read from undefined value
+          method=POST path=/orders/:id/discount
+          file=src/orders/apply-discount.handler.ts duration=31ms
+          error code:   NULL_READ
+          error detail: the object holding .percent was undefined; the coupon may not exist
+          how to fix:   check the coupon exists before reading .percent
+          actual error: TypeError: Cannot read properties of undefined (reading 'percent')
+          stack:        at ApplyDiscountHandler.execute (src/orders/apply-discount.handler.ts)
+                        at OrdersController.discount (src/orders/orders.controller.ts)
+          user id:      u_2201
+          trace id:     a3ce929d0e0e47364bf92f3577b34da6"
+    `)
   })
 
   it('LOG_STACK=off (default) prints no stack', () => {

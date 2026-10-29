@@ -1,4 +1,5 @@
 import type { LoggerService } from '@nestjs/common'
+import { dirname, sep } from 'path'
 import {
   DEFAULT_EVENT,
   type EventCode,
@@ -7,6 +8,7 @@ import {
 } from '../catalog'
 import { type HintVars, lookupHint } from '../errors/hints'
 import { serializeError } from '../errors/error-serializer'
+import { originOf } from '../errors/origin'
 import {
   type DependencyType,
   LEVEL_WEIGHT,
@@ -26,6 +28,10 @@ import { canHold, holdLine } from './held-lines'
 import { redactRecord, stripQuery } from './redact'
 import { recordSink } from './sink'
 import { createJsonWriter, createPrettyWriter, type LineWriter } from './writer'
+
+/** The SDK's own files (src/ or dist/): never the place a line was logged from. */
+const SDK_DIR = dirname(__dirname) + sep
+const isSdkFile = (file: string) => file.startsWith(SDK_DIR)
 
 export interface LoggerConfig {
   /** e.g. 'orders-api'. */
@@ -155,13 +161,15 @@ export class AppLogger implements LoggerService {
   // ---- Pipeline ------------------------------------------------------------
 
   private fromCall(level: LogLevel, message: unknown, params: unknown[]) {
-    if (!this.isLevelEnabled(level)) return
+    // a `level` override may raise the line, so 'error' still has to be parsed
+    if (!this.isLevelEnabled(level) && !this.isLevelEnabled('error')) return
     let parsed: ReturnType<typeof parseArgs>
     try {
       parsed = parseArgs(message, params)
     } catch {
       parsed = { message: String(message), options: {}, fields: {}, labels: {} }
     }
+    if (!this.isLevelEnabled(parsed.options.level ?? level)) return
     let event: EventCode = DEFAULT_EVENT
     if (parsed.options.event !== undefined) {
       if (isEventCode(parsed.options.event)) event = parsed.options.event
@@ -174,6 +182,11 @@ export class AppLogger implements LoggerService {
           },
         )
     }
+    // A code with no error object has no stack: take the caller's.
+    const callStack =
+      parsed.options.code && parsed.error === undefined
+        ? new Error().stack
+        : undefined
     this.emit({
       level,
       event,
@@ -183,6 +196,7 @@ export class AppLogger implements LoggerService {
       fields: parsed.fields,
       labels: parsed.labels,
       options: parsed.options,
+      callStack,
     })
   }
 
@@ -196,6 +210,7 @@ export class AppLogger implements LoggerService {
     labels: Record<string, string>
     options: LogOptions
     hintVars?: HintVars
+    callStack?: string
   }) {
     let level = input.level
     const record: Record<string, unknown> = {
@@ -321,9 +336,11 @@ export class AppLogger implements LoggerService {
     record: Record<string, unknown>,
     input: {
       event: EventCode
+      message?: string
       error?: unknown
       options: LogOptions
       hintVars?: HintVars
+      callStack?: string
     },
     level: LogLevel,
   ): { level: LogLevel; downgraded: boolean } {
@@ -352,57 +369,78 @@ export class AppLogger implements LoggerService {
       }
     } else if (options.code) {
       record['error.code'] = options.code
+      const origin = originOf(input.callStack, isSdkFile)
+      record['log.origin.function'] = origin?.function
+      record['log.origin.file.name'] = origin?.file
     }
     if (options.reason) record.reason = options.reason
 
-    const devHint = options.hint ?? error?.hint
-    if (devHint) {
-      record['error.hint'] = devHint
-      record['error.hint_detail'] = options.hintDetail ?? error?.hintDetail
-      dropTypeAsCode(record)
-      return kept
+    // Field by field: what the call or the AppError says wins over the table.
+    const own = {
+      hint: options.hint ?? error?.hint,
+      detail: options.detail ?? error?.detail,
+      howToFix: options.howToFix ?? error?.howToFix,
+      category: options.category ?? error?.category,
+      target: options.target ?? error?.target,
+      // The level an AppError carries is for app.log lines; SDK events keep theirs.
+      level:
+        options.level ?? (input.event === 'app.log' ? error?.level : undefined),
     }
-    if (!error && !options.code) return kept
-
-    const resolved = lookupHint(
-      {
-        code: record['error.code'] as string | undefined,
-        dependency: record['dependency.type'] as DependencyType | undefined,
-        message: error?.message,
-        error: input.error,
-      },
-      {
-        name: record['dependency.name'] as string | undefined,
-        host: record['dependency.host'] as string | undefined,
-        port: record['dependency.port'] as number | undefined,
-        ...input.hintVars,
-      },
-    )
-    if (!resolved) {
+    const resolved =
+      error || options.code
+        ? lookupHint(
+            {
+              code: record['error.code'] as string | undefined,
+              dependency: (options.dependency ??
+                error?.codeDependency ??
+                record['dependency.type']) as DependencyType | undefined,
+              message: error?.message,
+              error: input.error,
+            },
+            {
+              name: record['dependency.name'] as string | undefined,
+              host: record['dependency.host'] as string | undefined,
+              port: record['dependency.port'] as number | undefined,
+              ...input.hintVars,
+            },
+          )
+        : undefined
+    record['error.hint'] = own.hint ?? resolved?.hint
+    record['error.detail'] = own.detail ?? (resolved?.detail || undefined)
+    record['error.how_to_fix'] =
+      own.howToFix ?? (resolved?.howToFix || undefined)
+    if (resolved) {
+      // lookupHint names the error only when its key should replace what is there.
+      if (resolved.code) record['error.code'] = resolved.code
+      // `TypeError [TypeError]` says nothing; the matched pattern names it.
+      if (record['error.code'] === record['error.type']) {
+        record['error.code'] =
+          resolved.key !== record['error.type'] ? resolved.key : undefined
+      }
+    } else {
       dropTypeAsCode(record)
-      return kept
-    }
-    record['error.hint'] = resolved.hint
-    record['error.hint_detail'] = resolved.hintDetail
-    record['error.fix'] = resolved.fix
-    // lookupHint names the error only when its key should replace what is there.
-    if (resolved.code) record['error.code'] = resolved.code
-    // `TypeError [TypeError]` says nothing; the matched pattern names it.
-    if (record['error.code'] === record['error.type']) {
-      record['error.code'] =
-        resolved.key !== record['error.type'] ? resolved.key : undefined
     }
     addLabels(record, {
-      error_category: resolved.category,
-      error_target: resolved.target,
+      error_category: own.category ?? resolved?.category,
+      error_target: own.target ?? resolved?.target,
     })
+    // A code with no message and no error: the line reads as its hint.
+    if (
+      !input.message &&
+      !error?.message &&
+      options.code &&
+      record['error.hint']
+    ) {
+      record.message = record['error.hint']
+    }
+    if (own.level) return { level: own.level, downgraded: false }
     // A plain error line about a caller mistake (4xx, duplicate) is a
     // warning, unless it made the request answer 5xx: inside a request the
     // line waits for the status (see held-lines.ts).
     if (
       input.event === 'app.log' &&
       level === 'error' &&
-      resolved.level === 'warn'
+      resolved?.level === 'warn'
     ) {
       return { level: 'warn', downgraded: true }
     }

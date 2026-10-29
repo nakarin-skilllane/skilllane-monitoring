@@ -43,6 +43,13 @@ function oracle(message: string): Error {
   return Object.assign(new Error(message), { errorNum })
 }
 
+/** What the line says about this case: error.detail then error.how_to_fix. */
+function words(line: Record<string, any>): string {
+  return [line['error.detail'], line['error.how_to_fix']]
+    .filter(Boolean)
+    .join(' ')
+}
+
 function logged(error: unknown): Record<string, any> {
   const { logger, lines } = captureLogger()
   logger.error('failed', error)
@@ -57,7 +64,7 @@ describe('Oracle: names mapped to Entity.property', () => {
       ),
     )
     expect(line.labels.error_target).toBe('QuestionBankEntity.title')
-    expect(line['error.fix']).toBe(
+    expect(words(line)).toBe(
       'QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.',
     )
   })
@@ -81,7 +88,7 @@ describe('Oracle: names mapped to Entity.property', () => {
       error_target: 'QuestionBankEntity(schoolId, code)',
       error_category: 'data',
     })
-    expect(line['error.fix']).toContain('(schoolId, code)')
+    expect(words(line)).toContain('(schoolId, code)')
   })
 
   it('ORA-02291 resolves a TypeORM hash FK name', () => {
@@ -91,7 +98,7 @@ describe('Oracle: names mapped to Entity.property', () => {
       ),
     )
     expect(line.labels.error_target).toBe('QuestionBankEntity.schoolId')
-    expect(line['error.fix']).toContain('SchoolEntity that does not exist')
+    expect(words(line)).toContain('SchoolEntity that does not exist')
   })
 
   it('ORA-02292 says who still references the record', () => {
@@ -100,21 +107,17 @@ describe('Oracle: names mapped to Entity.property', () => {
         'ORA-02292: integrity constraint (PROD_RE.FK_9aac039515e82d599e803f24c4b) violated - child record found',
       ),
     )
-    expect(line['error.fix']).toContain(
+    expect(words(line)).toContain(
       'SchoolEntity is still referenced by QuestionBankEntity.schoolId',
     )
   })
 
   it('ORA-00904 tells a missing migration from a query typo', () => {
     expect(
-      logged(oracle('ORA-00904: "Q"."SCHOOL_ID": invalid identifier'))[
-        'error.fix'
-      ],
+      words(logged(oracle('ORA-00904: "Q"."SCHOOL_ID": invalid identifier'))),
     ).toContain('a migration has not run')
     expect(
-      logged(oracle('ORA-00904: "Q"."SCHOLL_ID": invalid identifier'))[
-        'error.fix'
-      ],
+      words(logged(oracle('ORA-00904: "Q"."SCHOLL_ID": invalid identifier'))),
     ).toContain('a typo or a wrong alias (Q.SCHOLL_ID)')
   })
 
@@ -122,7 +125,7 @@ describe('Oracle: names mapped to Entity.property', () => {
     const line = logged(
       oracle('ORA-00932: inconsistent datatypes: expected - got CLOB'),
     )
-    expect(line['error.fix']).toMatch(/^A CLOB column/)
+    expect(words(line)).toMatch(/^A CLOB column/)
   })
 
   it('falls back to the raw name without a schema', () => {
@@ -145,10 +148,10 @@ describe('TypeORM', () => {
     )
     const line = logged(error)
     expect(line['log.level']).toBe('warn')
-    expect(line['error.fix']).toBe(
+    expect(words(line)).toBe(
       'No QuestionBankEntity found by (id, schoolId). Check the id the client sent, or whether the row was deleted.',
     )
-    expect(line['error.fix']).not.toContain('42')
+    expect(words(line)).not.toContain('42')
   })
 
   it('names the empty criteria method', () => {
@@ -168,17 +171,15 @@ describe('runtime', () => {
 
   it('reading an array member means a missing list', () => {
     expect(
-      typeError("Cannot read properties of undefined (reading 'map')")[
-        'error.fix'
-      ],
+      words(typeError("Cannot read properties of undefined (reading 'map')")),
     ).toMatch(/^Expected an array/)
   })
 
   it('reading a relation name points at relation loading', () => {
     expect(
-      typeError("Cannot read properties of undefined (reading 'school')")[
-        'error.fix'
-      ],
+      words(
+        typeError("Cannot read properties of undefined (reading 'school')"),
+      ),
     ).toContain('relation of QuestionBankEntity')
   })
 
@@ -229,16 +230,20 @@ describe('validation 400', () => {
 })
 
 describe('pretty', () => {
-  it('shows the specific fix under the headline', () => {
+  it('shows the case under the headline: code, detail, how to fix', () => {
     const line = logged(
       oracle(
         'ORA-12899: value too large for column "PROD_RE"."question_bank"."title" (actual: 312, maximum: 255)',
       ),
     )
-    const [, where, detail] = formatPretty(line).split('\n')
+    const [, where, code, detail, howToFix] = formatPretty(line).split('\n')
     expect(where).toContain('target=QuestionBankEntity.title')
+    expect(code).toBe('    error code:   ORA-12899')
     expect(detail).toBe(
-      '    error detail: QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.',
+      '    error detail: QuestionBankEntity.title got 312 (max 255).',
+    )
+    expect(howToFix).toBe(
+      '    how to fix:   Validate the length in the DTO or import before saving.',
     )
   })
 })

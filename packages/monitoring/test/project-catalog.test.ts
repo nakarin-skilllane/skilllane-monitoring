@@ -15,7 +15,8 @@ describe('normalizeCatalog', () => {
           catalog: {
             STUDENT_LEAVE_SCHOOL: {
               hint: 'Student left school',
-              hintDetail: 'Left.',
+              detail: 'Left.',
+              howToFix: 'Check the roster.',
               category: 'input',
               level: 'warn',
             },
@@ -26,11 +27,12 @@ describe('normalizeCatalog', () => {
     })
     expect(c.issues).toEqual([])
     expect(c.patterns).toEqual([
-      { key: '1701', hint: 'Role title exists', hintDetail: '' },
+      { key: '1701', hint: 'Role title exists', detail: '', howToFix: '' },
       {
         key: 'STUDENT_LEAVE_SCHOOL',
         hint: 'Student left school',
-        hintDetail: 'Left.',
+        detail: 'Left.',
+        howToFix: 'Check the roster.',
         category: 'input',
         level: 'warn',
       },
@@ -59,13 +61,14 @@ describe('normalizeCatalog', () => {
     })
   })
 
-  it('cuts long hint / hintDetail and drops unknown fields with an issue each', () => {
+  it('cuts long hint / detail / howToFix and drops unknown fields with an issue each', () => {
     const c = normalizeCatalog({
       errors: {
         catalog: {
           LONG: {
             hint: 'x'.repeat(31),
-            hintDetail: 'y'.repeat(201),
+            detail: 'y'.repeat(201),
+            howToFix: 'z'.repeat(201),
             category: 'oops',
             level: 'fatal',
             messageMatch: 'not a regexp',
@@ -77,7 +80,8 @@ describe('normalizeCatalog', () => {
     })
     const long = c.patterns.find((p) => p.key === 'LONG')!
     expect(long.hint).toBe(`${'x'.repeat(30)}…`)
-    expect(long.hintDetail).toBe(`${'y'.repeat(200)}…`)
+    expect(long.detail).toBe(`${'y'.repeat(200)}…`)
+    expect(long.howToFix).toBe(`${'z'.repeat(200)}…`)
     expect(long.category).toBeUndefined()
     expect(long.level).toBeUndefined()
     expect(long.messageMatch).toBeUndefined()
@@ -87,7 +91,7 @@ describe('normalizeCatalog', () => {
     ).toBeUndefined()
     expect(
       c.issues.filter((i) => i.severity === 'error').map((i) => i.code),
-    ).toEqual(['BAD_DEP', 'LONG', 'LONG', 'LONG', 'LONG', 'LONG'])
+    ).toEqual(['BAD_DEP', 'LONG', 'LONG', 'LONG', 'LONG', 'LONG', 'LONG'])
   })
 
   it('skips entries without a hint and warns about code names', () => {

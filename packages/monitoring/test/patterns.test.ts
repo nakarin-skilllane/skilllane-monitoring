@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { EVENT_CATALOG, templatePlaceholders } from '../src/catalog'
 import { lookupHint } from '../src/errors/hints'
@@ -5,12 +7,25 @@ import {
   ALL_PATTERNS,
   ALLOWED_PLACEHOLDERS,
   DEPENDENCY_HINT_MAX,
-  HINT_DETAIL_MAX,
+  DETAIL_MAX,
   HINT_MAX,
+  HOW_TO_FIX_MAX,
 } from '../src/errors/patterns'
 import { ALLOWED_FIELDS } from '../src/types'
 
+const PATTERN_DIR = join(__dirname, '../src/errors/patterns')
+const PATTERN_FILES = readdirSync(PATTERN_DIR).filter(
+  (file) =>
+    file.endsWith('.ts') &&
+    !['index.ts', 'types.ts', 'explain-helpers.ts'].includes(file),
+)
+
 describe('error patterns', () => {
+  it.each(PATTERN_FILES)('%s lists the sources of its texts', (file) => {
+    const text = readFileSync(join(PATTERN_DIR, file), 'utf8')
+    expect(text).toMatch(/^\/\/ Sources:\n(\/\/ - https:\/\/\S+.*\n)+/m)
+  })
+
   it('has unique (dependency, key) pairs', () => {
     const seen = new Set<string>()
     for (const pattern of ALL_PATTERNS) {
@@ -26,10 +41,15 @@ describe('error patterns', () => {
       const max = pattern.dependency ? DEPENDENCY_HINT_MAX : HINT_MAX
       // Placeholders count at their name length; filled values may be longer.
       expect(pattern.hint.length, pattern.hint).toBeLessThanOrEqual(max)
-      expect(pattern.hintDetail.length, pattern.hintDetail).toBeLessThanOrEqual(
-        HINT_DETAIL_MAX,
+      expect(pattern.detail.length, pattern.detail).toBeLessThanOrEqual(
+        DETAIL_MAX,
       )
-      for (const text of [pattern.hint, pattern.hintDetail]) {
+      expect(pattern.howToFix.length, pattern.howToFix).toBeLessThanOrEqual(
+        HOW_TO_FIX_MAX,
+      )
+      expect(pattern.detail, 'detail').not.toBe('')
+      expect(pattern.howToFix, 'howToFix').not.toBe('')
+      for (const text of [pattern.hint, pattern.detail, pattern.howToFix]) {
         const placeholders = [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1])
         if (!pattern.dependency) expect(placeholders, text).toEqual([])
         for (const name of placeholders)
@@ -51,8 +71,10 @@ describe('error patterns', () => {
       ),
     ).toMatchObject({
       hint: 'Redis "cache" unreachable',
-      hintDetail:
+      detail:
         'Nothing is listening at 10.0.0.1:6379. Redis may be stopped or restarting, or REDIS_HOST/REDIS_PORT is wrong.',
+      howToFix:
+        'Check that Redis is running and that REDIS_HOST/REDIS_PORT points to it.',
     })
     expect(lookupHint({ code: 'ECONNREFUSED' })?.hint).toBe(
       'Connection refused',

@@ -25,8 +25,8 @@ const TEXT_FIELDS = [
   'error.message',
   'error.stack_trace',
   'error.hint',
-  'error.hint_detail',
-  'error.fix',
+  'error.detail',
+  'error.how_to_fix',
   'db.statement',
   'reason',
 ]

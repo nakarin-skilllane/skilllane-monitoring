@@ -27,7 +27,8 @@ export interface HintVars {
 
 export interface ResolvedHint {
   hint: string
-  hintDetail: string
+  detail: string
+  howToFix: string
   /** Set when the pattern matched by message and the error had no code. */
   code?: string
   level?: 'warn' | 'error'
@@ -37,8 +38,6 @@ export interface ResolvedHint {
   category?: ErrorCategory
   /** What to fix, taken from the message: property, constraint, column. */
   target?: string
-  /** One sentence about this specific case (`error.fix`). */
-  fix?: string
 }
 
 const DEPENDENCY_LABEL: Record<DependencyType, string> = {
@@ -97,15 +96,17 @@ for (const pattern of ALL_PATTERNS) {
 
 /**
  * An app entry that overrides a built-in code replaces the words (hint, detail,
- * category, level) but keeps what the built-in pattern knows about the error:
- * its explain / target (error.fix, error_target) and retryable.
+ * how to fix, category, level) but keeps what the built-in pattern knows about
+ * the error: its explain / target (the case's detail, error_target) and
+ * retryable.
  */
 function inherit(pattern: ErrorPattern): ErrorPattern {
   const base = BUILTIN_BY_KEY.get(pattern.key)
   if (!base) return pattern
   return {
     ...pattern,
-    hintDetail: pattern.hintDetail || base.hintDetail,
+    detail: pattern.detail || base.detail,
+    howToFix: pattern.howToFix || base.howToFix,
     category: pattern.category ?? base.category,
     level: pattern.level ?? base.level,
     retryable: pattern.retryable ?? base.retryable,
@@ -149,14 +150,14 @@ export function lookupHint(
     (match.project && match.byMessage && GENERIC_CODE.test(query.code))
   return {
     hint: fill(pattern.hint, dependency, vars),
-    hintDetail: fill(pattern.hintDetail, dependency, vars),
+    detail: explained?.detail ?? fill(pattern.detail, dependency, vars),
+    howToFix: explained?.howToFix ?? fill(pattern.howToFix, dependency, vars),
     code: names ? pattern.key : undefined,
     level: pattern.level,
     retryable: pattern.retryable,
     key: pattern.key,
     category: categoryOf(pattern),
     target: explained?.target ?? targetOf(pattern, query.message),
-    fix: explained?.fix,
   }
 }
 

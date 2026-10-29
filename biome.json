@@ -103,6 +103,7 @@
       "**",
       "!**/school-e2e-tests",
       "!**/dist",
+      "!**/src/errors/error-codes.ts",
       "!**/public",
       "!**/public/js/pdpa/**",
       "!**/node_modules",

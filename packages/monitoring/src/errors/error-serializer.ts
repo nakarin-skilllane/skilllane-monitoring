@@ -1,6 +1,8 @@
 import type { DependencyType } from '../types'
 import { type AdapterResult, ERROR_ADAPTERS } from './adapters'
+import { isAppError } from './app-error'
 import { type ErrorOrigin, originOf } from './origin'
+import type { ErrorCategory } from './patterns/types'
 import { projectCodeOf } from './project-catalog'
 import { usecaseOf } from '../logger/usecase'
 
@@ -25,9 +27,15 @@ export interface SerializedError {
   status?: number
   dependency?: DependencyType
   domain?: string
-  /** Hint carried by the error itself (AppError or a compatible shape). */
+  /** Words carried by an AppError (other errors' hint/detail are theirs, e.g. Postgres). */
   hint?: string
-  hintDetail?: string
+  detail?: string
+  howToFix?: string
+  category?: ErrorCategory
+  target?: string
+  level?: 'warn' | 'error'
+  /** AppError(ErrorCode.redis.…): the dependency its code belongs to. */
+  codeDependency?: DependencyType
 }
 
 function runAdapters(error: unknown): AdapterResult {
@@ -101,17 +109,21 @@ export function serializeError(error: unknown): SerializedError {
       origin: originOf(stack),
       usecase: usecaseOf(error),
       cause: serializeCause(extracted.cause, 1, seen),
-      status: extracted.status,
+      status:
+        extracted.status ?? (isAppError(error) ? error.statusCode : undefined),
       dependency: extracted.dependency,
       domain: extracted.domain,
-      hint:
-        typeof (error as any)?.hint === 'string'
-          ? (error as any).hint
-          : undefined,
-      hintDetail:
-        typeof (error as any)?.hintDetail === 'string'
-          ? (error as any).hintDetail
-          : undefined,
+      ...(isAppError(error)
+        ? {
+            hint: error.hint,
+            detail: error.detail,
+            howToFix: error.howToFix,
+            category: error.category,
+            target: error.target,
+            level: error.level,
+            codeDependency: error.dependency,
+          }
+        : {}),
     }
   } catch {
     return { type: 'NonError', message: '[unserializable error]' }

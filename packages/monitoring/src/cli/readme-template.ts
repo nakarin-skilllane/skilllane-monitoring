@@ -14,16 +14,19 @@ export function renderReadme(o: {
 # ตาราง error ของแอปสำหรับ skilllane-monitoring
 
 \`${file}\` บอก skilllane-monitoring ว่า error code ของแอปนี้แต่ละตัวคืออะไร hint และคำอธิบายจะขึ้นใน log และหน้า monitor
-SDK อ่านไฟล์นี้เองตอนแอป start (ไม่มีใคร import) และดูที่นี่ก่อนตารางในตัว package
+SDK อ่านไฟล์นี้เองตอนแอป start (ไม่ต้องลงทะเบียนหรือ import) และดูที่นี่ก่อนตารางในตัว package
+ไฟล์ไม่ import อะไรจาก SDK แต่โค้ดของแอป import \`AppErrorCode\` จากไฟล์นี้ได้ (path สัมพัทธ์จากไฟล์ที่ import): \`import { AppErrorCode } from './skilllane-monitoring/errors'\`
 
 ## วิธีใช้
 
-1. เติม \`hint\` / \`hintDetail\` ให้ code ใน \`${file}\` (รายการที่ \`hint\` ว่างถูกข้าม ใช้งานได้ทันทีแม้ยังเติมไม่ครบ)
+1. เติม \`hint\` / \`detail\` / \`howToFix\` ให้ code ใน \`${file}\` (รายการที่ \`hint\` ว่างถูกข้าม ใช้งานได้ทันทีแม้ยังเติมไม่ครบ)
 2. โค้ดเดิมไม่ต้องแก้: error ที่มี code ตรงกับตารางได้ hint อัตโนมัติ
    \`\`\`ts
    throw new OrderAlreadyPaidException()                     // errorCode = 'ORDER_ALREADY_PAID'
    this.logger.error('Import failed', { code: 'E1001' })     // บันทึกโดยไม่ throw
    \`\`\`
+   ใช้ code เป็นค่าคงที่ได้: \`throw new AppError(AppErrorCode.ORDER_ALREADY_PAID, 'Order already paid', { status: 409 })\`
+   หรือ \`this.logger.warn('Pay failed', { code: AppErrorCode.ORDER_ALREADY_PAID, howToFix: '…' })\`
 3. code อยู่ช่องอื่นของ error (หรือเป็นตัวเลข) ให้เปิด \`codeOf\` ในไฟล์ เช่น \`codeOf: (err) => err.errorCode\`
 4. error ที่ไม่มี code (เช่น \`throw new NotFoundException('User not found')\`) ใช้ \`messageMatch: /^User not found$/\`
    แล้ว \`error.code\` ของบรรทัดนั้นจะเป็นชื่อ key แทน \`HTTP_404\`
@@ -34,7 +37,8 @@ SDK อ่านไฟล์นี้เองตอนแอป start (ไม�
 | ช่อง | กฎ | ใส่ผิดแล้ว |
 |---|---|---|
 | \`hint\` | ≤ 30 ตัวอักษร (≤ 40 เมื่อมี \`dependency\`) ภาษาอังกฤษ คงที่ (ใช้จัดกลุ่ม error ห้ามใส่ค่าที่เปลี่ยน) | ว่าง = ข้ามรายการ · ยาวเกิน = ตัดแล้วต่อ \`…\` |
-| \`hintDetail\` | ≤ 200 ตัวอักษร สาเหตุที่น่าจะเป็น + สิ่งที่ควรเช็ก | ยาวเกิน = ตัดแล้วต่อ \`…\` |
+| \`detail\` | ≤ 200 ตัวอักษร เกิดอะไรขึ้น (สาเหตุที่น่าจะเป็น) | ยาวเกิน = ตัดแล้วต่อ \`…\` |
+| \`howToFix\` | ≤ 200 ตัวอักษร ต้องทำอะไร | ยาวเกิน = ตัดแล้วต่อ \`…\` |
 | \`category\` | \`bug\` \`input\` \`data\` \`dependency\` \`config\` (ใครต้องแก้) | ค่าอื่น = ไม่ใช้ช่องนี้ |
 | \`level\` | \`warn\` (ความผิดฝั่งผู้เรียก) หรือ \`error\` · request ที่ตอบ 5xx เป็น error เสมอ | ค่าอื่น = ไม่ใช้ช่องนี้ |
 | \`dependency\` | \`redis\` \`oracle\` \`kafka\` \`rabbitmq\` \`smtp\` \`http\` \`s3\` \`google\` | ค่าอื่น = ไม่ใช้ช่องนี้ |
@@ -43,7 +47,7 @@ SDK อ่านไฟล์นี้เองตอนแอป start (ไม�
 | ทุกช่อง | ห้ามใส่ข้อมูลส่วนบุคคล | ตรวจอัตโนมัติไม่ได้ |
 
 ใส่ผิดกฎแล้วแอป**ไม่ล้ม** ตอน start จะมี warn 1 บรรทัดบอกว่าปรับอะไรไป
-key ที่ตรงกับตารางในตัว (เช่น \`ORA-00001\`) ทับได้: ใส่แค่ \`hint\` ส่วนที่เหลือ (คำอธิบาย, category, level, \`error.fix\`) ยังมาจากตารางในตัว
+key ที่ตรงกับตารางในตัว (เช่น \`ORA-00001\`) ทับได้: ใส่แค่ \`hint\` ส่วนที่เหลือ (\`detail\`, \`howToFix\`, category, level และคำอธิบายเฉพาะกรณี) ยังมาจากตารางในตัว
 
 ## ใช้ path อื่น หรือไฟล์ที่สร้างเอง
 
@@ -70,7 +74,7 @@ custom error catalog: more than one file found; the first is used
 - ไฟล์ต้อง build เป็น CommonJS (ค่าปกติของ NestJS) ไฟล์แบบ ES module โหลดไม่ได้ ตอน start จะขึ้น \`failed to load\`
 - \`outDir\` ของ tsconfig ที่ไม่ใช่ \`dist\` ให้ตั้ง \`SKILLLANE_MONITORING_ERRORS_FILE_PATH\` เป็น path ของไฟล์ \`.js\` ที่ build แล้ว
 - ไฟล์ต้องอยู่ใต้ \`src/\` และอยู่ใน \`include\` ของ tsconfig ไม่อย่างนั้นไม่มีไฟล์ \`.js\` ให้โหลด
-- ยังกำหนด \`error.fix\` (วิธีแก้เฉพาะกรณี) จากตารางนี้ไม่ได้
+- คำอธิบายเฉพาะกรณี (เช่น \`ProductEntity.name got 312 (max 255)\`) มาจากตารางในตัวเท่านั้น ตารางนี้กำหนดได้แค่ข้อความคงที่
 - โหลดครั้งเดียวตอน start แก้ไฟล์แล้วต้อง build และ restart แอป
 
 ## ถอดออก

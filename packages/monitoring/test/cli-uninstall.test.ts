@@ -118,6 +118,37 @@ describe('planUninstall', () => {
   })
 })
 
+describe('planUninstall and AppErrorCode', () => {
+  it('blocks on app files that use AppErrorCode from the catalog', () => {
+    const root = project({
+      ...APP,
+      'src/orders.ts': `import { AppErrorCode } from './skilllane-monitoring/errors'\nthrow new Error(AppErrorCode.ORDER_PAID)\n`,
+      'src/notes.ts': `const AppErrorCodes = 1\n`,
+    })
+    const blockers = planUninstall({ cwd: root }).blockers
+    expect(blockers.map((b) => `${b.file}:${b.line}`)).toEqual([
+      'src/orders.ts:1',
+      'src/orders.ts:2',
+    ])
+  })
+
+  it('tells to replace AppErrorCode.X with the string first', async () => {
+    const root = project({
+      ...APP,
+      'src/orders.ts': `x(AppErrorCode.ORDER_PAID)\n`,
+    })
+    const out: string[] = []
+    const status = await uninstall({
+      cwd: root,
+      yes: true,
+      out: (l: string) => out.push(l),
+      run: () => 0,
+    } as any)
+    expect(status).toBe(1)
+    expect(out.join('\n')).toMatch(/AppErrorCode\.X.*string/)
+  })
+})
+
 describe('uninstall', () => {
   it('removes the catalog, the register lines, then runs the package manager', async () => {
     const root = project(APP)

@@ -37,7 +37,7 @@ LOG_PRETTY=true                       # dev เท่านั้น
 | `/overview` | ภาพรวมของทุก service (หน้าแรก) |
 | `/logs` | log ทุกบรรทัด ค้นข้อความ กรองตาม level, `event.code`, trace id, user id, route |
 | `/traces` · `/traces/<trace id>` | trace ของแต่ละ request และ Network view (header, body, SQL) |
-| `/errors` | error ที่จัดกลุ่มแล้ว พร้อม hint, fix, จำนวนครั้ง, จำนวน user และ route ที่เกิด |
+| `/errors` | error ที่จัดกลุ่มแล้ว พร้อม hint, detail, how to fix, จำนวนครั้ง, จำนวน user และ route ที่เกิด |
 | `/jobs` | งานเบื้องหลัง (BullMQ, Kafka, RabbitMQ, cron) |
 
 engine (ที่ `LOG_HTTP_URL` ชี้ไป) อยู่ที่ port 5100 ค่า `trace id` ใน log และ header `request-id` ใช้เปิด `/traces/<trace id>` ได้ตรง ๆ

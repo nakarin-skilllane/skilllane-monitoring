@@ -7,12 +7,14 @@ import {
 } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { symlinkSync } from 'fs'
 import { errorsCheck } from '../src/cli/errors-check'
 import { errorsInit } from '../src/cli/errors-init'
 import { runCli } from '../src/cli/index'
 import { scanSource } from '../src/cli/scan'
+import { renderCatalogFile } from '../src/cli/template'
 
 function project(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), 'slm-cli-'))
@@ -64,13 +66,16 @@ describe('errors init', () => {
     )
     expect(file).toContain('hint: ≤ 30')
     expect(file).toContain(
-      `STUDENT_LEAVE_SCHOOL: { hint: '', hintDetail: '' },`,
+      `  STUDENT_LEAVE_SCHOOL: { hint: '', detail: '', howToFix: '' },`,
     )
-    expect(file).toContain(`E1001: { hint: '', hintDetail: '' },`)
+    expect(file).toContain(`  E1001: { hint: '', detail: '', howToFix: '' },`)
     expect(file).toContain(
-      `USER_NOT_FOUND: { messageMatch: /^User not found$/, hint: '', hintDetail: '' }, // seen 3 times`,
+      `  USER_NOT_FOUND: { messageMatch: /^User not found$/, hint: '', detail: '', howToFix: '' }, // seen 3 times`,
     )
     expect(file).toContain('export default {')
+    expect(file).toContain('const catalog = {')
+    expect(file).toContain('export const AppErrorCode = ')
+    expect(file).toContain('    catalog,')
     expect(out.join('\n')).toContain('src/skilllane-monitoring/errors.ts')
     const readme = readFileSync(
       join(root, 'src/skilllane-monitoring/README.md'),
@@ -81,6 +86,58 @@ describe('errors init', () => {
     )
     expect(readme).toContain('SKILLLANE_MONITORING_ERRORS_FILE_PATH')
     expect(readme).toContain('pnpm skilllane-monitoring uninstall')
+  })
+
+  it('exports AppErrorCode with the catalog keys', async () => {
+    const file = renderCatalogFile({
+      errorCodes: ['ORDER_ALREADY_PAID'],
+      loggerCodes: ['1701'],
+      repeatedMessages: [],
+    } as any)
+    const js = ts.transpileModule(file, {
+      compilerOptions: { module: ts.ModuleKind.CommonJS },
+    }).outputText
+    const mod: any = { exports: {} }
+    new Function('module', 'exports', js)(mod, mod.exports)
+    expect(mod.exports.AppErrorCode).toEqual({
+      ORDER_ALREADY_PAID: 'ORDER_ALREADY_PAID',
+      1701: '1701',
+    })
+    expect(Object.keys(mod.exports.default.errors.catalog)).toEqual([
+      '1701',
+      'ORDER_ALREADY_PAID',
+    ])
+  })
+
+  it('compiles for apps on target es2017 (no es2019 APIs)', () => {
+    const file = renderCatalogFile({
+      errorCodes: ['ORDER_ALREADY_PAID'],
+      loggerCodes: ['1701'],
+      repeatedMessages: [{ message: 'User not found', count: 3 }],
+    } as any)
+    const options: ts.CompilerOptions = {
+      strict: true,
+      target: ts.ScriptTarget.ES2017,
+      lib: ['lib.es2017.d.ts'],
+      noEmit: true,
+      skipLibCheck: true,
+      types: [],
+    }
+    const host = ts.createCompilerHost(options)
+    const read = host.getSourceFile.bind(host)
+    host.getSourceFile = (name, lang, ...rest) =>
+      name === 'catalog.ts'
+        ? ts.createSourceFile(name, file, lang)
+        : read(name, lang, ...rest)
+    const fileExists = host.fileExists.bind(host)
+    host.fileExists = (name) => name === 'catalog.ts' || fileExists(name)
+    const program = ts.createProgram(['catalog.ts'], options, host)
+    const diagnostics = ts.getPreEmitDiagnostics(program)
+    expect(
+      diagnostics.map((d) =>
+        ts.flattenDiagnosticMessageText(d.messageText, '\n'),
+      ),
+    ).toEqual([])
   })
 
   it('never overwrites a README the team wrote', () => {

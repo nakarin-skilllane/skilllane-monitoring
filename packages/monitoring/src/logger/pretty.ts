@@ -165,9 +165,7 @@ function actualError(record: Record_): string | undefined {
   if (!present(record['error.message'])) return undefined
   const type = record['error.type'] ?? 'Error'
   const message = String(record['error.message']).replace(/\s*\n\s*/g, ' ')
-  return present(record['error.code'])
-    ? `${type} [${record['error.code']}] ${message}`
-    : `${type}: ${message}`
+  return `${type}: ${message}`
 }
 
 /** `at Class.method (src/…/file.ts)`: our frames, no line numbers. */
@@ -210,7 +208,9 @@ function stackLines(record: Record_, mode: PrettyStack): string[] {
  *   <time> <LVL> <service/role>  <title>
  *       <method path status source job id attempt>
  *       <file target …> duration=…
- *       error detail: <what to do>
+ *       error code:   <code>
+ *       error detail: <what happened>
+ *       how to fix:   <what to do>
  *       actual error: <the error>
  *       user id:      <user id>
  *       trace id:     <trace id>
@@ -233,9 +233,13 @@ export function formatPretty(
 
   const lines = [first.trimEnd()]
   for (const kv of keyValueLines(record)) lines.push(`${INDENT}${kv}`)
-  const detail = record['error.fix'] ?? record['error.hint_detail']
-  if (present(detail)) {
-    lines.push(`${INDENT}${label('error detail:')}${detail}`)
+  const errorLines: [string, unknown][] = [
+    ['error code:', record['error.code']],
+    ['error detail:', record['error.detail']],
+    ['how to fix:', record['error.how_to_fix']],
+  ]
+  for (const [name, value] of errorLines) {
+    if (present(value)) lines.push(`${INDENT}${label(name)}${value}`)
   }
   const actual = actualError(record)
   if (actual) lines.push(`${INDENT}${label('actual error:')}${actual}`)

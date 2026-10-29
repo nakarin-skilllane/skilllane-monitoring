@@ -1,5 +1,6 @@
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api'
 import { describe, expect, it } from 'vitest'
+import { ErrorCode } from '../src/errors/error-codes'
 import { FailedStepSpanProcessor } from '../src/integrations/failed-step'
 import { newScope, runInScope } from '../src/logger/context'
 import { formatPretty } from '../src/logger/pretty'
@@ -180,5 +181,31 @@ describe('FailedStepSpanProcessor', () => {
       processor.onEnd(span('oracle SELECT', SpanStatusCode.OK, 20)),
     )
     expect(scope.failedStep).toBeUndefined()
+  })
+})
+
+describe('a code logged without an error', () => {
+  class MailService {
+    constructor(
+      private readonly logger: ReturnType<typeof captureLogger>['logger'],
+    ) {}
+    sendWelcomeMail() {
+      this.logger.error(ErrorCode.smtp.ECONNECTION)
+    }
+  }
+
+  it('names the function and file that logged it', () => {
+    const { logger, lines } = captureLogger()
+    new MailService(logger).sendWelcomeMail()
+    expect(lastLine(lines)).toMatchObject({
+      'log.origin.function': 'MailService.sendWelcomeMail',
+      'log.origin.file.name': 'test/where.test.ts',
+    })
+  })
+
+  it('leaves lines without a code alone', () => {
+    const { logger, lines } = captureLogger()
+    logger.error('plain message')
+    expect(lastLine(lines)['log.origin.function']).toBeUndefined()
   })
 })

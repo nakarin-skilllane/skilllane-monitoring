@@ -1,5 +1,7 @@
 export * from './adapters'
 export * from './app-error'
+export * from './error-code'
+export * from './error-codes'
 export * from './error-serializer'
 export * from './hints'
 export * from './patterns'

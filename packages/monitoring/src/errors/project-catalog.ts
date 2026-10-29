@@ -5,7 +5,8 @@ import type { ErrorCategory, ErrorPattern } from './patterns/types'
 /** One code of the app's own table (src/skilllane-monitoring/errors.ts). */
 export interface ProjectCatalogEntry {
   hint: string
-  hintDetail?: string
+  detail?: string
+  howToFix?: string
   category?: ErrorCategory
   level?: 'warn' | 'error'
   dependency?: DependencyType
@@ -56,6 +57,7 @@ const CODE_SHAPE = /^[A-Z0-9_.-]+$/
 const HINT_MAX = 30
 const HINT_MAX_DEPENDENCY = 40
 const DETAIL_MAX = 200
+const HOW_TO_FIX_MAX = 200
 
 function cut(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text
@@ -97,7 +99,12 @@ export function normalizeCatalog(raw: unknown): NormalizedCatalog {
       problem('hint is required; entry skipped')
       continue
     }
-    const pattern: ErrorPattern = { key: code, hint: '', hintDetail: '' }
+    const pattern: ErrorPattern = {
+      key: code,
+      hint: '',
+      detail: '',
+      howToFix: '',
+    }
     if (entry.dependency !== undefined) {
       if (DEPENDENCIES.includes(entry.dependency)) {
         pattern.dependency = entry.dependency
@@ -112,11 +119,17 @@ export function normalizeCatalog(raw: unknown): NormalizedCatalog {
       problem(`hint is longer than ${hintMax} characters; cut`)
     }
     pattern.hint = cut(entry.hint, hintMax)
-    if (typeof entry.hintDetail === 'string') {
-      if (entry.hintDetail.length > DETAIL_MAX) {
-        problem(`hintDetail is longer than ${DETAIL_MAX} characters; cut`)
+    if (typeof entry.detail === 'string') {
+      if (entry.detail.length > DETAIL_MAX) {
+        problem(`detail is longer than ${DETAIL_MAX} characters; cut`)
       }
-      pattern.hintDetail = cut(entry.hintDetail, DETAIL_MAX)
+      pattern.detail = cut(entry.detail, DETAIL_MAX)
+    }
+    if (typeof entry.howToFix === 'string') {
+      if (entry.howToFix.length > HOW_TO_FIX_MAX) {
+        problem(`howToFix is longer than ${HOW_TO_FIX_MAX} characters; cut`)
+      }
+      pattern.howToFix = cut(entry.howToFix, HOW_TO_FIX_MAX)
     }
     if (entry.category !== undefined) {
       if (CATEGORIES.includes(entry.category)) {

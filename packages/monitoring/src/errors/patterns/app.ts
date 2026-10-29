@@ -1,12 +1,24 @@
 import type { ErrorPattern } from './types'
 
-/** jsonwebtoken: the message says which check failed. */
+// Sources:
+// - https://github.com/auth0/node-jsonwebtoken/blob/master/verify.js (jsonwebtoken error classes and messages)
+// - https://github.com/v8/v8/blob/main/src/common/message-template.h (JSON.parse SyntaxError messages)
+// - https://zod.dev/basics (ZodError and error.issues)
+// - https://mongoosejs.com/docs/api/error.html (Mongoose CastError and ValidationError)
+// - https://docs.oracle.com/en/error-help/db/ora-00001/ (Oracle error help, also ORA-01400, ORA-02291, ORA-02292, ORA-12899)
+// - https://github.com/Stuk/jszip/blob/main/lib/zipEntries.js (zip errors raised when reading .xlsx files)
+// - https://csv.js.org/parse/errors/ (csv-parse errors)
+
+/**
+ * jsonwebtoken: the message says which check failed. Each case gives the
+ * detail, and a howToFix only where the pattern's own does not fit.
+ */
 function explainJwt({ message }: { message: string }) {
-  const cases: [RegExp, string, string][] = [
+  const cases: [RegExp, string, string, string?][] = [
     [
       /^jwt malformed/,
       'format',
-      'The token is not three base64url parts: a truncated header, a cookie value, or an empty string was passed.',
+      'The token does not have three dot-separated parts: it was truncated, or another value (a cookie, an opaque token) was passed as the JWT.',
     ],
     [
       /^jwt must be provided|^jwt must be a string/,
@@ -21,7 +33,8 @@ function explainJwt({ message }: { message: string }) {
     [
       /^invalid algorithm/,
       'algorithm',
-      'The token alg is not in the allowed algorithms (HS256 vs RS256). Check the verify options and the issuer.',
+      'The token alg is not in the allowed algorithms (HS256 vs RS256).',
+      'Check the verify options and the issuer.',
     ],
     [
       /^jwt audience invalid/,
@@ -42,17 +55,20 @@ function explainJwt({ message }: { message: string }) {
     [
       /^jwt signature is required/,
       'signature',
-      'An unsigned token (alg none) was presented. Reject it.',
+      'An unsigned token (alg none) was presented.',
+      'Reject the token.',
     ],
     [
       /^secret or public key must be provided/,
       'secret',
       'The verify call has no secret/key: the JWT secret env var is missing.',
+      'Set the JWT secret env var.',
     ],
     [
       /^secretOrPublicKey/,
       'secret',
-      'The key material does not match the algorithm (a PEM for HS256, a string for RS256). Check the JWT config.',
+      'The key material does not match the algorithm (a PEM for HS256, a string for RS256).',
+      'Check the JWT config.',
     ],
     [
       /^invalid (exp|nbf) value/,
@@ -61,8 +77,8 @@ function explainJwt({ message }: { message: string }) {
     ],
     [/^maxAge exceeded/, 'age', 'The token is older than the maxAge option.'],
   ]
-  for (const [match, target, fix] of cases) {
-    if (match.test(message)) return { target, fix }
+  for (const [match, target, detail, howToFix] of cases) {
+    if (match.test(message)) return { target, detail, howToFix }
   }
   return undefined
 }
@@ -73,22 +89,26 @@ export const appPatterns: ErrorPattern[] = [
   {
     key: 'TokenExpiredError',
     hint: 'Token expired',
-    hintDetail:
-      'The JWT is past its exp time. The client should refresh or sign in again.',
+    detail:
+      'The JWT is past its exp time, or older than the maxAge verify option.',
+    howToFix: 'Have the client refresh the token or sign in again.',
     level: 'warn',
   },
   {
     key: 'NotBeforeError',
     hint: 'Token not active yet',
-    hintDetail:
-      'The JWT nbf time is in the future. Clock skew between the issuer and this server; allow a small clockTolerance.',
+    detail:
+      'The JWT nbf time is in the future: clock skew between the issuer and this server.',
+    howToFix: 'Allow a small clockTolerance.',
     level: 'warn',
   },
   {
     key: 'JsonWebTokenError',
     hint: 'Invalid token',
-    hintDetail:
-      'The JWT signature or format is invalid (see fix). It may be tampered with, or signed by another environment.',
+    detail:
+      'The JWT signature or format is invalid. It may be tampered with, or signed by another environment.',
+    howToFix:
+      'Have the client sign in again; if every token fails, check the JWT secret and verify options.',
     level: 'warn',
     explain: explainJwt,
   },
@@ -97,20 +117,24 @@ export const appPatterns: ErrorPattern[] = [
     messageMatch:
       /(Unexpected token .* in JSON|is not valid JSON|Unexpected end of JSON input|in JSON at position \d+|Unterminated string in JSON|Expected (property name|',' or '}'|double-quoted property name|',' or ']') .*JSON|Unexpected non-whitespace character after JSON|Bad control character in string literal in JSON)/,
     hint: 'Invalid JSON',
-    hintDetail:
-      'JSON.parse received malformed text. Check the producer of the payload or message; an HTML error page in place of JSON is common.',
+    detail:
+      'JSON.parse received malformed text; an HTML error page in place of JSON is common.',
+    howToFix: 'Check the producer of the payload or message.',
     category: 'bug',
     explain: ({ message }) => {
       const token = message.match(/Unexpected token '?(.)'?/)?.[1]
       if (token === '<')
         return {
           target: 'html',
-          fix: 'The text starts with "<": an HTML error/login page was parsed as JSON. Check the HTTP status and content-type before parsing.',
+          detail:
+            'The text starts with "<": an HTML error/login page was parsed as JSON.',
+          howToFix: 'Check the HTTP status and content-type before parsing.',
         }
       if (/Unexpected end of JSON input/.test(message))
         return {
           target: 'truncated',
-          fix: 'The JSON ends early: an empty body, a truncated message, or a string cut by a column size limit.',
+          detail:
+            'The JSON ends early: an empty body, a truncated message, or a string cut by a column size limit.',
         }
       return undefined
     },
@@ -118,15 +142,17 @@ export const appPatterns: ErrorPattern[] = [
   {
     key: 'ValidationError',
     hint: 'Validation failed',
-    hintDetail:
-      'A validation library (class-validator, Joi, Yup, Mongoose) rejected the input. The message lists the failing fields.',
+    detail:
+      'A validation library (class-validator, Joi, Yup, Mongoose) rejected the input.',
+    howToFix: 'Correct the failing fields listed in the error message.',
     level: 'warn',
   },
   {
     key: 'ZodError',
     hint: 'Validation failed',
-    hintDetail:
-      'A Zod schema rejected the input. error.issues lists each path and rule.',
+    detail: 'A Zod schema rejected the input.',
+    howToFix:
+      'Read error.issues for each path and rule, and correct those fields.',
     level: 'warn',
     explain: ({ error }) => {
       const paths = Array.isArray(error?.issues)
@@ -143,7 +169,7 @@ export const appPatterns: ErrorPattern[] = [
       return paths.length
         ? {
             target: paths.join(', '),
-            fix: `Rejected fields: ${paths.join(', ')}.`,
+            detail: `Rejected fields: ${paths.join(', ')}.`,
           }
         : undefined
     },
@@ -151,70 +177,84 @@ export const appPatterns: ErrorPattern[] = [
   {
     key: 'CastError',
     hint: 'Value has wrong type',
-    hintDetail:
-      'A value could not be cast to the schema type (e.g. an invalid ObjectId or a non-numeric id). Validate the input first.',
+    detail:
+      'A value could not be cast to the schema type (e.g. an invalid ObjectId or a non-numeric id).',
+    howToFix: 'Validate the input first.',
     level: 'warn',
     target: /for path "([^"]+)"/,
   },
   {
     key: 'DUPLICATE_RECORD',
     hint: 'Duplicate record',
-    hintDetail:
-      'A unique constraint rejected the row (ORA-00001). Often a double submit or concurrent insert.',
+    detail:
+      'A unique constraint rejected the row (ORA-00001), often a double submit or concurrent insert.',
+    howToFix:
+      'Check for an existing record before inserting, and block double submits.',
     level: 'warn',
   },
   {
     key: 'RESOURCE_BUSY',
     hint: 'Record is locked',
-    hintDetail: 'Another transaction holds the lock. Retry shortly.',
+    detail: 'Another transaction holds the lock.',
+    howToFix: 'Retry shortly.',
     retryable: true,
   },
   {
     key: 'VALUE_TOO_LONG',
     hint: 'Value too long',
-    hintDetail: 'A value exceeds the column size (ORA-12899).',
+    detail: 'A value exceeds the column size (ORA-12899).',
+    howToFix:
+      'Validate the value length against the column size before saving.',
     level: 'warn',
   },
   {
     key: 'REQUIRED_FIELD_MISSING',
     hint: 'Required field missing',
-    hintDetail: 'A NOT NULL column was left empty (ORA-01400).',
+    detail: 'A NOT NULL column was left empty (ORA-01400).',
+    howToFix: 'Validate that the required field is set before saving.',
     level: 'warn',
   },
   {
     key: 'RELATED_RECORD_NOT_FOUND',
     hint: 'Related record not found',
-    hintDetail: 'A foreign key points to a missing record (ORA-02291).',
+    detail: 'A foreign key points to a missing record (ORA-02291).',
+    howToFix: 'Check that the referenced record exists before saving.',
     level: 'warn',
   },
   {
     key: 'RELATED_RECORD_IN_USE',
     hint: 'Record still in use',
-    hintDetail: 'Other records still reference this one (ORA-02292).',
+    detail: 'Other records still reference this one (ORA-02292).',
+    howToFix: 'Remove or reassign the referencing records first.',
     level: 'warn',
   },
   {
     key: 'VALIDATION_ERROR',
     hint: 'Invalid request',
-    hintDetail: 'The request data failed validation.',
+    detail: 'The request data failed validation.',
+    howToFix: 'Correct the request data and send it again.',
     level: 'warn',
   },
   {
     key: 'HEADER_VALIDATION_ERROR',
     hint: 'Wrong file headers',
-    hintDetail: 'The uploaded file columns do not match the template.',
+    detail: 'The uploaded file columns do not match the template.',
+    howToFix: 'Use the current template and keep its column headers unchanged.',
     level: 'warn',
   },
   {
     key: 'FILE_EMPTY',
     hint: 'Uploaded file is empty',
-    hintDetail: 'The uploaded file has no data rows.',
+    detail: 'The uploaded file has no data rows.',
+    howToFix: 'Upload a file that has data rows below the header.',
     level: 'warn',
   },
   {
     key: 'FILE_ALREADY_PROCESSED',
     hint: 'File already processed',
-    hintDetail: 'This import file was processed before.',
+    detail: 'This import file was processed before.',
+    howToFix:
+      'Check the import history instead of uploading the same file again.',
     level: 'warn',
   },
   {
@@ -222,8 +262,10 @@ export const appPatterns: ErrorPattern[] = [
     messageMatch:
       /^(End of data reached|Can't find end of central directory|File is not a zip file|Corrupted zip|Invalid signature)/i,
     hint: 'Excel file unreadable',
-    hintDetail:
-      'The uploaded .xlsx is not a valid zip/OOXML file: a renamed .xls/.csv, a truncated upload, or an HTML download page. Validate the file signature.',
+    detail:
+      'The uploaded .xlsx is not a valid zip/OOXML file: a renamed .xls/.csv, a truncated upload, or an HTML download page.',
+    howToFix:
+      'Ask for a real .xlsx file, and reject uploads that are not a zip file before parsing them.',
     level: 'warn',
     category: 'input',
   },
@@ -232,8 +274,9 @@ export const appPatterns: ErrorPattern[] = [
     messageMatch:
       /^(Invalid Record Length|Invalid Opening Quote|Invalid Closing Quote|Quote Not Closed|Unclosed quote)/i,
     hint: 'CSV malformed',
-    hintDetail:
+    detail:
       'The CSV has a row with the wrong number of columns or a broken quote. The message names the line.',
+    howToFix: 'Fix the columns or quotes on that line and upload again.',
     level: 'warn',
     category: 'input',
     target: /on line (\d+)/,

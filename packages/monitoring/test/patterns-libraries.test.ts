@@ -25,6 +25,13 @@ beforeAll(() =>
 )
 afterAll(() => resetSchema())
 
+/** What the line says about this case: error.detail then error.how_to_fix. */
+function words(line: Record<string, any>): string {
+  return [line['error.detail'], line['error.how_to_fix']]
+    .filter(Boolean)
+    .join(' ')
+}
+
 function logged(error: unknown): Record<string, any> {
   const { logger, lines } = captureLogger()
   logger.error('failed', error)
@@ -133,7 +140,7 @@ describe('adapters added for the wider pattern table', () => {
     const line = logged(error)
     expect(line['error.code']).toBe('AMQP_406')
     expect(line.labels.error_target).toBe('queue exam.grade')
-    expect(line['error.fix']).toContain('x-dead-letter-exchange')
+    expect(words(line)).toContain('x-dead-letter-exchange')
   })
 })
 
@@ -151,7 +158,7 @@ describe('explain for the new patterns', () => {
     const line = logged(error)
     expect(line['error.code']).toBe('ERR_BAD_REQUEST')
     expect(line.labels.error_target).toBe('HTTP 404')
-    expect(line['error.fix']).toContain('404')
+    expect(words(line)).toContain('404')
     expect(JSON.stringify(line)).not.toContain('/v1/users/1')
   })
 
@@ -163,7 +170,7 @@ describe('explain for the new patterns', () => {
     )
     expect(line['error.code']).toBe('NEST_UNRESOLVED_DEPENDENCY')
     expect(line.labels.error_target).toBe('ExamService ← CacheService')
-    expect(line['error.fix']).toContain('ExamModule')
+    expect(words(line)).toContain('ExamModule')
   })
 
   it('Redis ERR: tells max clients from a generic reply', () => {
@@ -172,7 +179,7 @@ describe('explain for the new patterns', () => {
     const line = logged(error)
     expect(line['error.code']).toBe('ERR')
     expect(line.labels.error_target).toBe('GET exam:*:state')
-    expect(line['error.fix']).toContain('too many clients')
+    expect(words(line)).toContain('too many clients')
   })
 
   it('BullMQ: job not in state names the command and the expected state', () => {
@@ -190,7 +197,7 @@ describe('explain for the new patterns', () => {
     const line = logged(error)
     expect(line['error.hint']).toBe('Invalid token')
     expect(line.labels.error_target).toBe('signature')
-    expect(line['error.fix']).toContain('JWT_SECRET')
+    expect(words(line)).toContain('JWT_SECRET')
   })
 
   it('Node: ERR_INVALID_ARG_TYPE names the argument and the received type', () => {
@@ -202,7 +209,7 @@ describe('explain for the new patterns', () => {
     )
     const line = logged(error)
     expect(line.labels.error_target).toBe('path')
-    expect(line['error.fix']).toContain(
+    expect(words(line)).toContain(
       'Received undefined'.replace('Received ', 'was '),
     )
   })
@@ -225,21 +232,19 @@ describe('explain for the new patterns', () => {
       hint: 'Certificate expired',
       category: 'config',
     })
-    expect(
-      lookupHint({ code: 'SELF_SIGNED_CERT_IN_CHAIN' })?.hintDetail,
-    ).toContain('NODE_EXTRA_CA_CERTS')
+    const tls = lookupHint({ code: 'SELF_SIGNED_CERT_IN_CHAIN' })
+    expect(`${tls?.detail} ${tls?.howToFix}`).toContain('NODE_EXTRA_CA_CERTS')
   })
 
   it('Kafka: protocol error types and client messages both resolve', () => {
     expect(
       lookupHint({ code: 'TOPIC_AUTHORIZATION_FAILED', dependency: 'kafka' }),
     ).toMatchObject({ category: 'config' })
-    expect(
-      lookupHint({
-        code: 'KafkaJSError',
-        dependency: 'kafka',
-        message: 'The producer is disconnected',
-      })?.fix,
-    ).toContain('connect()')
+    const kafka = lookupHint({
+      code: 'KafkaJSError',
+      dependency: 'kafka',
+      message: 'The producer is disconnected',
+    })
+    expect(`${kafka?.detail} ${kafka?.howToFix}`).toContain('connect()')
   })
 })

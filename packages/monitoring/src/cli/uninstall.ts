@@ -37,6 +37,8 @@ const BARE_REGISTER =
 /** An import or require of the package (not a comment or a string that merely names it). */
 const ANY_USE =
   /(?:\bfrom\s+|\bimport\s+|\brequire\(\s*)['"]skilllane-monitoring(?:\/[\w-]+)?['"]/
+/** A use of the generated constants: they go away with the catalog file. */
+const CODE_USE = /\bAppErrorCode\b/
 const OUTSIDE_FILE =
   /^(Dockerfile.*|package\.json|\.env.*|docker-compose.*\.ya?ml|.*\.sh)$/
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage'])
@@ -116,7 +118,9 @@ export function planUninstall(o: {
             text: text.trim(),
           }
           if (BARE_REGISTER.test(text)) plan.lineEdits.push(ref)
-          else if (ANY_USE.test(text)) plan.blockers.push(ref)
+          else if (ANY_USE.test(text) || CODE_USE.test(text)) {
+            plan.blockers.push(ref)
+          }
         })
     }
   }
@@ -205,6 +209,11 @@ export async function uninstall(o: {
     plan.outside,
   )
   out(`Then run: ${plan.removeCommand.join(' ')}`)
+  if (plan.blockers.some((r) => CODE_USE.test(r.text))) {
+    out(
+      "AppErrorCode lives in the catalog file that is deleted: replace AppErrorCode.X with the string 'X' first",
+    )
+  }
   if (plan.blockers.length && !o.force) {
     out('Stopped: fix the uses above first, or run again with --force')
     return 1
