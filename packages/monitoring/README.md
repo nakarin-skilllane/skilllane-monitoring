@@ -56,8 +56,10 @@ error names the function that logged it in `log.origin.*`.
 
 Nest's own exceptions (`BadRequestException`, `NotFoundException`, any
 `HttpException`) take `code`, `hint`, `detail`, `howToFix`, `category`,
-`level` and `target` in their options (second argument) once the app imports
-anything from `skilllane-monitoring`. Thrown with any of them, the exception
+`level` and `target` in their options (second argument). The types come with
+any import of the package, `skilllane-monitoring/register` included, and with
+the catalog `errors init` writes; an app that only uses `NODE_OPTIONS` and has
+an older catalog adds `import type {} from 'skilllane-monitoring'` to any file. Thrown with any of them, the exception
 gets one line (`log.logger: ExceptionsHandler`) before Nest answers; thrown
 without them it stays quiet, as Nest leaves it. The body keeps
 `error: 'Bad Request'` (Nest would drop it for an options object without

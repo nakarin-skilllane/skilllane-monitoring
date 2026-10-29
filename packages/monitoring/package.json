@@ -1,6 +1,6 @@
 {
   "name": "skilllane-monitoring",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Structured ECS logging and OpenTelemetry traces for NestJS services, published to the customer queue (Kafka, RabbitMQ or BullMQ) or OTLP",
   "license": "ISC",
   "author": "Nakarin Maneekhat",

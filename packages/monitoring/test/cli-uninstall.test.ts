@@ -116,6 +116,21 @@ describe('planUninstall', () => {
       },
     ])
   })
+
+  it('removes a bare type import like a register line', () => {
+    const root = project({
+      'src/main.ts': `import type {} from 'skilllane-monitoring'\n`,
+    })
+    const plan = planUninstall({ cwd: root })
+    expect(plan.lineEdits).toEqual([
+      {
+        file: 'src/main.ts',
+        line: 1,
+        text: `import type {} from 'skilllane-monitoring'`,
+      },
+    ])
+    expect(plan.blockers).toEqual([])
+  })
 })
 
 describe('planUninstall and AppErrorCode', () => {

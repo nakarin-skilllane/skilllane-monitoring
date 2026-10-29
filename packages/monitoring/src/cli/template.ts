@@ -52,7 +52,12 @@ export function renderCatalogFile(scan: ScanResult): string {
       `  ${name}: { messageMatch: /^${escapeRegExp(message)}$/, hint: '', detail: '', howToFix: '' }, // seen ${count} times`,
     )
   }
-  return `${RULES}const catalog = {
+  return `${RULES}
+// Types only, removed at build: lets Nest exceptions take { code, howToFix, … }
+// in apps that load the SDK with NODE_OPTIONS and never import it.
+import type {} from 'skilllane-monitoring'
+
+const catalog = {
 ${lines.join('\n')}
 }
 

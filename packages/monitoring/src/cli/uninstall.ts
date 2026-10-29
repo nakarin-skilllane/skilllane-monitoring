@@ -22,7 +22,7 @@ export interface Ref {
 export interface UninstallPlan {
   deleteFiles: string[]
   deleteDirs: string[]
-  /** Bare register imports, removed. */
+  /** Bare register imports and `import type {} from 'skilllane-monitoring'`, removed. */
   lineEdits: Ref[]
   /** Other uses of the SDK: the build breaks without the package. */
   blockers: Ref[]
@@ -33,7 +33,7 @@ export interface UninstallPlan {
 
 const PACKAGE = 'skilllane-monitoring'
 const BARE_REGISTER =
-  /^\s*(?:import\s+['"]skilllane-monitoring\/register['"]|require\(\s*['"]skilllane-monitoring\/register['"]\s*\))\s*;?\s*$/
+  /^\s*(?:import\s+['"]skilllane-monitoring\/register['"]|require\(\s*['"]skilllane-monitoring\/register['"]\s*\)|import\s+type\s*\{\s*\}\s*from\s+['"]skilllane-monitoring['"])\s*;?\s*$/
 /** An import or require of the package (not a comment or a string that merely names it). */
 const ANY_USE =
   /(?:\bfrom\s+|\bimport\s+|\brequire\(\s*)['"]skilllane-monitoring(?:\/[\w-]+)?['"]/

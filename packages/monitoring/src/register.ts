@@ -6,4 +6,7 @@
  */
 import { registerTelemetry } from './otel/register'
 
+// Loads the HttpExceptionOptions fields for apps whose only import is this one.
+export type { HttpExceptionLogOptions } from './errors/http-exception'
+
 registerTelemetry()

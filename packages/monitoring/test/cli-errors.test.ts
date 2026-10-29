@@ -99,6 +99,8 @@ describe('errors init', () => {
     }).outputText
     const mod: any = { exports: {} }
     new Function('module', 'exports', js)(mod, mod.exports)
+    // The type import leaves nothing at run time: the catalog loads without the SDK.
+    expect(js).not.toContain('require(')
     expect(mod.exports.AppErrorCode).toEqual({
       ORDER_ALREADY_PAID: 'ORDER_ALREADY_PAID',
       1701: '1701',
@@ -122,15 +124,23 @@ describe('errors init', () => {
       noEmit: true,
       skipLibCheck: true,
       types: [],
+      // The app has the SDK installed; here a stub stands in for it.
+      baseUrl: '.',
+      paths: { 'skilllane-monitoring': ['sdk-stub.d.ts'] },
     }
     const host = ts.createCompilerHost(options)
     const read = host.getSourceFile.bind(host)
     host.getSourceFile = (name, lang, ...rest) =>
       name === 'catalog.ts'
         ? ts.createSourceFile(name, file, lang)
-        : read(name, lang, ...rest)
+        : name.endsWith('sdk-stub.d.ts')
+          ? ts.createSourceFile(name, 'export {}', lang)
+          : read(name, lang, ...rest)
     const fileExists = host.fileExists.bind(host)
-    host.fileExists = (name) => name === 'catalog.ts' || fileExists(name)
+    host.fileExists = (name) =>
+      name === 'catalog.ts' ||
+      name.endsWith('sdk-stub.d.ts') ||
+      fileExists(name)
     const program = ts.createProgram(['catalog.ts'], options, host)
     const diagnostics = ts.getPreEmitDiagnostics(program)
     expect(
