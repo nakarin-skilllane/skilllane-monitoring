@@ -1,4 +1,6 @@
 import { Logger, type LoggerService } from '@nestjs/common'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ErrorCode } from '../src/errors/error-codes'
 import { reconfigureLogger } from '../src/logger'
@@ -164,6 +166,19 @@ describe('log', () => {
     reconfigureLogger({ service: 'exam-api' })
     gradeAll()
     expect(lastLine(lines)['service.name']).toBe('exam-api')
+  })
+
+  it("is the same log from 'skilllane-monitoring/log'", async () => {
+    expect((await import('../src/log')).log).toBe(log)
+    const pkg = JSON.parse(
+      readFileSync(join(__dirname, '../package.json'), 'utf8'),
+    )
+    expect(pkg.exports['./log']).toEqual({
+      types: './dist/log.d.ts',
+      require: './dist/log.js',
+      default: './dist/log.js',
+    })
+    expect(pkg.typesVersions['*'].log).toEqual(['./dist/log.d.ts'])
   })
 
   it("goes to Nest's logger with the class as context when LOGGING_ENGINE=legacy", () => {

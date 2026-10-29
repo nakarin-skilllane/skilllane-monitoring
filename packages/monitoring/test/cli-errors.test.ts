@@ -159,7 +159,7 @@ describe('errors init', () => {
       'utf8',
     )
     expect(file.split('\n')[0]).toBe(LOG_MARKER)
-    expect(file).toContain(`export { log } from 'skilllane-monitoring'`)
+    expect(file).toContain(`export { log } from 'skilllane-monitoring/log'`)
     expect(out).toContain(
       'created src/skilllane-monitoring/log.ts: import { log } from it instead of new Logger(Class.name)',
     )

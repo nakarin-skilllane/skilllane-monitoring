@@ -40,6 +40,11 @@
       "require": "./dist/register.js",
       "default": "./dist/register.js"
     },
+    "./log": {
+      "types": "./dist/log.d.ts",
+      "require": "./dist/log.js",
+      "default": "./dist/log.js"
+    },
     "./otel": {
       "types": "./dist/otel/index.d.ts",
       "require": "./dist/otel/index.js",
@@ -58,6 +63,9 @@
       ],
       "register": [
         "./dist/register.d.ts"
+      ],
+      "log": [
+        "./dist/log.d.ts"
       ],
       "otel": [
         "./dist/otel/index.d.ts"

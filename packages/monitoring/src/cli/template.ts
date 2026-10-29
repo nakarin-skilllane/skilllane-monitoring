@@ -90,7 +90,7 @@ export function renderLogFile(): string {
  * Import it from this file, not from the package: \`pnpm skilllane-monitoring uninstall\`
  * turns this file into Nest's Logger, and the app still builds without the SDK.
  */
-export { log } from 'skilllane-monitoring'
+export { log } from 'skilllane-monitoring/log'
 `
 }
 

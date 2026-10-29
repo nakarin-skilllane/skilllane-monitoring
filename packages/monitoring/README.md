@@ -46,14 +46,15 @@ await tracked('cache:rebuild_product_list', () => this.rebuild())
 
 Or `log`, with no logger to declare: each line goes under the class that
 called it (`log.logger`) and says where (`log.origin.*`). It takes the same
-arguments, except that a trailing string is a value, never the context. Import
-it from the `log.ts` that `errors init` writes, not from the package:
+arguments, except that a trailing string is a value, never the context. It comes
+from `skilllane-monitoring/log` (or the package root); an app that may drop the
+SDK imports it from the `log.ts` that `errors init` writes instead:
 `uninstall` turns that file into Nest's `Logger`, so the app still builds.
 Finding the caller costs about 12 µs a line. With `LOGGING_ENGINE=legacy` it
 writes through Nest's logger, with the class as context.
 
 ```ts
-import { log } from '../skilllane-monitoring/log'
+import { log } from 'skilllane-monitoring/log'    // or '../skilllane-monitoring/log'
 
 log.error('Evaluate the exam failed', err)   // log.logger: ExamEvaluationService
 ```
