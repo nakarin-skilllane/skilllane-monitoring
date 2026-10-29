@@ -143,6 +143,44 @@ describe('level of an AppError', () => {
   })
 })
 
+describe('level from the status the app answers with', () => {
+  const levelOf = (error: unknown) => {
+    const { logger, lines } = captureLogger()
+    logger.error('Apply coupon failed', error)
+    return lastLine(lines)['log.level']
+  }
+
+  it('makes an unknown code answered 4xx a warning', () => {
+    expect(levelOf(new AppError('COUPON_EXPIRED', 'x', { status: 400 }))).toBe(
+      'warn',
+    )
+    expect(levelOf(new AppError('ORDER_PAID', 'x', { status: 409 }))).toBe(
+      'warn',
+    )
+  })
+
+  it('keeps error for 5xx, no status, or a level given', () => {
+    expect(levelOf(new AppError('CACHE_DOWN', 'x', { status: 503 }))).toBe(
+      'error',
+    )
+    expect(levelOf(new AppError('COUPON_EXPIRED', 'x'))).toBe('error')
+    expect(
+      levelOf(
+        new AppError('COUPON_EXPIRED', 'x', { status: 400, level: 'error' }),
+      ),
+    ).toBe('error')
+  })
+
+  it('ignores the status of an outgoing call', () => {
+    const outgoing = Object.assign(new Error('Request failed'), {
+      isAxiosError: true,
+      code: 'PARTNER_REJECTED',
+      response: { status: 404 },
+    })
+    expect(levelOf(outgoing)).toBe('error')
+  })
+})
+
 describe('JSON writer', () => {
   it('writes one valid JSON object per line, also for circular values', () => {
     const file = join(

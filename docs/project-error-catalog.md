@@ -54,6 +54,7 @@ SDK หาและโหลดไฟล์นี้เองตอนแอป 
 - **โค้ดเดิมไม่ต้องแก้** error ที่มี code ตรงกับตารางได้ hint อัตโนมัติ ทั้งที่ throw (`throw new OrderAlreadyPaidException()`) และที่บันทึกเอง (`this.logger.error('Import failed', { code: 'E1001' })`)
 - **ใช้ code เป็นค่าคงที่:** `AppErrorCode.ORDER_ALREADY_PAID` (ไฟล์ที่สร้างก่อน 0.5 เพิ่มเองได้ตามตัวอย่าง) และ code ในตัว SDK ใช้ `ErrorCode.<file>.<CODE>`
 - **ลำดับหา hint:** hint ที่ส่งมากับ error เอง → ตารางของโปรเจค → ตารางในตัว package → ไม่มี hint
+- **custom รายครั้งตอน throw exception ของ Nest:** `throw new BadRequestException('Coupon has expired', { code: AppErrorCode.COUPON_EXPIRED, howToFix: '…' })` ใส่ได้ `code` `hint` `detail` `howToFix` `category` `level` `target` (ช่องที่ไม่ใส่มาจากตาราง) แล้วได้ log 1 บรรทัด body ที่ client ได้ยังมี `error: 'Bad Request'` เหมือนเดิม · throw โดยไม่ใส่ช่องเหล่านี้ไม่มี log เหมือนเดิม · filter ของแอปที่ตอบเองโดยไม่เรียก `super.catch()` ต้อง log เอง
 - **code เป็นตัวเลขหรืออยู่ช่องอื่น:** ใส่ `codeOf` เช่น `(err) => err.errorCode`
 - **error ที่ไม่มี code** (เช่น `NotFoundException('User not found')`): ใช้ `messageMatch` แล้ว `error.code` ของบรรทัดนั้นจะเป็นชื่อ key แทน `HTTP_404`
 - **ทับ code ของตารางในตัว** (เช่น `ORA-00001`): ใส่แค่ `hint` ส่วนที่ไม่ได้ใส่ (`detail`, `howToFix`, category, level) คำอธิบายเฉพาะกรณี และ `error_target` ยังมาจากตารางในตัว
@@ -66,7 +67,7 @@ SDK หาและโหลดไฟล์นี้เองตอนแอป 
 | `detail` | ≤ 200 ตัวอักษร เกิดอะไรขึ้น (สาเหตุที่น่าจะเป็น) | ยาวเกิน = ตัดแล้วต่อ `…` |
 | `howToFix` | ≤ 200 ตัวอักษร ต้องทำอะไร | ยาวเกิน = ตัดแล้วต่อ `…` |
 | `category` | `bug` · `input` · `data` · `dependency` · `config` | ค่าอื่น = ไม่ใช้ช่องนี้ |
-| `level` | `warn` (ความผิดฝั่งผู้เรียก) หรือ `error` · request ที่ตอบ 5xx เป็น error เสมอ | ค่าอื่น = ไม่ใช้ช่องนี้ |
+| `level` | `warn` (ความผิดฝั่งผู้เรียก) หรือ `error` · ไม่ใส่: error ที่แอปตอบ 4xx (`AppError` `status`, exception ของ Nest) เป็น warn · request ที่ตอบ 5xx เป็น error เสมอ | ค่าอื่น = ไม่ใช้ช่องนี้ |
 | `dependency` | `redis` · `oracle` · `kafka` · `rabbitmq` · `smtp` · `http` · `s3` · `google` | ค่าอื่น = ไม่ใช้ช่องนี้ |
 | `messageMatch` | RegExp | ไม่ใช่ RegExp = ไม่ใช้ช่องนี้ |
 | key | `[A-Z0-9_.-]+` | ใช้ได้ แค่เตือนใน `errors check` |

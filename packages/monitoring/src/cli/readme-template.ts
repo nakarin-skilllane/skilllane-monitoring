@@ -27,6 +27,8 @@ SDK อ่านไฟล์นี้เองตอนแอป start (ไม�
    \`\`\`
    ใช้ code เป็นค่าคงที่ได้: \`throw new AppError(AppErrorCode.ORDER_ALREADY_PAID, 'Order already paid', { status: 409 })\`
    หรือ \`this.logger.warn('Pay failed', { code: AppErrorCode.ORDER_ALREADY_PAID, howToFix: '…' })\`
+   หรือใช้ exception ของ Nest ตามเดิม แล้วใส่ช่องที่อยากทับเป็น argument ตัวที่สอง (ได้ log 1 บรรทัด body ที่ client ได้ไม่เปลี่ยน):
+   \`throw new BadRequestException('Order already paid', { code: AppErrorCode.ORDER_ALREADY_PAID, howToFix: '…' })\`
 3. code อยู่ช่องอื่นของ error (หรือเป็นตัวเลข) ให้เปิด \`codeOf\` ในไฟล์ เช่น \`codeOf: (err) => err.errorCode\`
 4. error ที่ไม่มี code (เช่น \`throw new NotFoundException('User not found')\`) ใช้ \`messageMatch: /^User not found$/\`
    แล้ว \`error.code\` ของบรรทัดนั้นจะเป็นชื่อ key แทน \`HTTP_404\`
@@ -40,7 +42,7 @@ SDK อ่านไฟล์นี้เองตอนแอป start (ไม�
 | \`detail\` | ≤ 200 ตัวอักษร เกิดอะไรขึ้น (สาเหตุที่น่าจะเป็น) | ยาวเกิน = ตัดแล้วต่อ \`…\` |
 | \`howToFix\` | ≤ 200 ตัวอักษร ต้องทำอะไร | ยาวเกิน = ตัดแล้วต่อ \`…\` |
 | \`category\` | \`bug\` \`input\` \`data\` \`dependency\` \`config\` (ใครต้องแก้) | ค่าอื่น = ไม่ใช้ช่องนี้ |
-| \`level\` | \`warn\` (ความผิดฝั่งผู้เรียก) หรือ \`error\` · request ที่ตอบ 5xx เป็น error เสมอ | ค่าอื่น = ไม่ใช้ช่องนี้ |
+| \`level\` | \`warn\` (ความผิดฝั่งผู้เรียก) หรือ \`error\` · ไม่ใส่: error ที่แอปตอบ 4xx (\`AppError\` \`status\`, exception ของ Nest) เป็น warn · request ที่ตอบ 5xx เป็น error เสมอ | ค่าอื่น = ไม่ใช้ช่องนี้ |
 | \`dependency\` | \`redis\` \`oracle\` \`kafka\` \`rabbitmq\` \`smtp\` \`http\` \`s3\` \`google\` | ค่าอื่น = ไม่ใช้ช่องนี้ |
 | \`messageMatch\` | RegExp | ไม่ใช่ RegExp = ไม่ใช้ช่องนี้ |
 | key | \`[A-Z0-9_.-]+\` | ใช้ได้ แค่เตือนใน \`errors check\` |

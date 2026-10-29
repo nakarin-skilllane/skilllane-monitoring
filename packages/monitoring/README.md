@@ -40,6 +40,7 @@ this.logger.error('Send welcome mail failed', err, ErrorCode.smtp.ECONNECTION, {
 })
 this.logger.warn('Import failed', { code: AppErrorCode.PRICE_OUT_OF_RANGE, level: 'error' })
 throw new AppError(ErrorCode.redis.ECONNREFUSED, 'Cache is down', { status: 503 })
+throw new BadRequestException('Coupon has expired', { howToFix: 'Ask for another coupon.' })
 await tracked('cache:rebuild_product_list', () => this.rebuild())
 ```
 
@@ -48,9 +49,20 @@ await tracked('cache:rebuild_product_list', () => this.rebuild())
 `code`, may set `message`, `hint`, `detail`, `howToFix`, `category`, `level`,
 `target`, `labels`; each field left out comes from the app's catalog, then the
 built-in table. Without a message the line reads as its hint. `level` given
-here is final. `AppError` takes the same fields and `status` (the HTTP status
+here is final; with no level anywhere, an error the app answers 4xx with
+(`AppError` `status`, a Nest HTTP exception) is a warning. `AppError` takes the same fields and `status` (the HTTP status
 Nest answers with; its message goes to the client). A line with a code and no
 error names the function that logged it in `log.origin.*`.
+
+Nest's own exceptions (`BadRequestException`, `NotFoundException`, any
+`HttpException`) take `code`, `hint`, `detail`, `howToFix`, `category`,
+`level` and `target` in their options (second argument) once the app imports
+anything from `skilllane-monitoring`. Thrown with any of them, the exception
+gets one line (`log.logger: ExceptionsHandler`) before Nest answers; thrown
+without them it stays quiet, as Nest leaves it. The body keeps
+`error: 'Bad Request'` (Nest would drop it for an options object without
+`description`). The line comes from Nest's `BaseExceptionFilter`: an app
+filter that answers without calling `super.catch()` logs it itself.
 
 ## Where to fix it
 

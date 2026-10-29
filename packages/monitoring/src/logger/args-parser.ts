@@ -2,7 +2,7 @@ import { isSensitiveKey, REDACTED } from '../contract'
 import { appErrorByStack } from '../errors/app-error'
 import { type ErrorCodeRef, isErrorCodeRef } from '../errors/error-code'
 import { isErrorLike } from '../errors/error-serializer'
-import type { ErrorCategory } from '../errors/patterns/types'
+import { ERROR_CATEGORIES, type ErrorCategory } from '../errors/patterns/types'
 import type { LogOptions } from '../types'
 
 export interface ParsedArgs {
@@ -50,7 +50,6 @@ function isOptions(value: Record<string, unknown>): boolean {
   return keys.length > 0 && keys.every((key) => OPTION_KEYS.has(key))
 }
 
-const CATEGORIES = new Set(['bug', 'input', 'data', 'dependency', 'config'])
 const TEXT_OVERRIDES = [
   'hint',
   'detail',
@@ -90,7 +89,10 @@ function absorbOverrides(value: Record<string, unknown>, parsed: ParsedArgs) {
       delete parsed.options.dependency
     } else if (key === 'message' && typeof field === 'string') {
       parsed.message ??= field
-    } else if (key === 'category' && CATEGORIES.has(field as string)) {
+    } else if (
+      key === 'category' &&
+      ERROR_CATEGORIES.includes(field as ErrorCategory)
+    ) {
       parsed.options.category = field as ErrorCategory
     } else if (key === 'level' && (field === 'warn' || field === 'error')) {
       parsed.options.level = field

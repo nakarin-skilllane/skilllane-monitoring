@@ -8,6 +8,14 @@ import type { SchemaIndex } from '../schema'
  */
 export type ErrorCategory = 'bug' | 'input' | 'data' | 'dependency' | 'config'
 
+export const ERROR_CATEGORIES: readonly ErrorCategory[] = [
+  'bug',
+  'input',
+  'data',
+  'dependency',
+  'config',
+]
+
 /**
  * One entry of the hint table. Lookup order: (dependency, key) → key →
  * messageMatch. `hint`, `detail` and `howToFix` are constant English

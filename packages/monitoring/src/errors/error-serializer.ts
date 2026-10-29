@@ -1,6 +1,7 @@
 import type { DependencyType } from '../types'
 import { type AdapterResult, ERROR_ADAPTERS } from './adapters'
 import { isAppError } from './app-error'
+import { httpExceptionWords } from './http-exception'
 import { type ErrorOrigin, originOf } from './origin'
 import type { ErrorCategory } from './patterns/types'
 import { projectCodeOf } from './project-catalog'
@@ -25,16 +26,21 @@ export interface SerializedError {
   usecase?: string
   cause?: SerializedCause
   status?: number
+  /** The status the app answers with: an AppError's or a Nest HTTP exception's (not an outgoing call's). */
+  answerStatus?: number
   dependency?: DependencyType
   domain?: string
-  /** Words carried by an AppError (other errors' hint/detail are theirs, e.g. Postgres). */
+  /**
+   * Words carried by an AppError or given to a Nest HTTP exception (other
+   * errors' hint/detail are theirs, e.g. Postgres).
+   */
   hint?: string
   detail?: string
   howToFix?: string
   category?: ErrorCategory
   target?: string
   level?: 'warn' | 'error'
-  /** AppError(ErrorCode.redis.…): the dependency its code belongs to. */
+  /** ErrorCode.redis.… given as the code: the dependency it belongs to. */
   codeDependency?: DependencyType
 }
 
@@ -101,16 +107,22 @@ export function serializeError(error: unknown): SerializedError {
         ? (error as any).stack
         : undefined
     const seen = new Set<unknown>([error])
+    const { code: givenCode, ...given } = httpExceptionWords(error) ?? {}
     return {
       type: typeOf(error),
       message: messageOf(error),
-      code: projectCodeOf(error) ?? extracted.code,
+      code: givenCode ?? projectCodeOf(error) ?? extracted.code,
       stack,
       origin: originOf(stack),
       usecase: usecaseOf(error),
       cause: serializeCause(extracted.cause, 1, seen),
       status:
         extracted.status ?? (isAppError(error) ? error.statusCode : undefined),
+      answerStatus: isAppError(error)
+        ? error.statusCode
+        : typeof (error as any)?.getStatus === 'function'
+          ? extracted.status
+          : undefined,
       dependency: extracted.dependency,
       domain: extracted.domain,
       ...(isAppError(error)
@@ -123,7 +135,7 @@ export function serializeError(error: unknown): SerializedError {
             level: error.level,
             codeDependency: error.dependency,
           }
-        : {}),
+        : given),
     }
   } catch {
     return { type: 'NonError', message: '[unserializable error]' }

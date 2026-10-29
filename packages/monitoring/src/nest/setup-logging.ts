@@ -3,6 +3,7 @@ import { getLogger } from '../logger'
 import { flushAndExit } from '../otel/lifecycle'
 import { isBootFailureLogged, markBootFailureLogged } from './boot-failure'
 import { logStartedAfterListen } from './app-started'
+import { patchLoadedHttpExceptions } from './http-exceptions'
 import {
   installProcessHandlers,
   type UnhandledRejectionMode,
@@ -52,6 +53,7 @@ export function setupLogging(
 
   const logger = getLogger()
   app.useLogger(logger)
+  patchLoadedHttpExceptions()
   // Boot lines held by bufferLogs, now in order before `app.started`.
   ;(app as { flushLogs?: () => void }).flushLogs?.()
 

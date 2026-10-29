@@ -44,6 +44,7 @@ import {
   type UnhandledRejectionMode,
 } from '../nest/process-handlers'
 import { appRequire, env, envNumber, serviceIdentity } from './identity'
+import { hookHttpExceptions } from '../nest/http-exceptions'
 import { hookNestFactory } from '../nest/nest-auto'
 import { hookAutoWatch } from './auto-watch'
 import { hookKafkajsLogs } from './kafkajs-hook'
@@ -355,6 +356,7 @@ export function registerTelemetry(options: TelemetryOptions = {}): Telemetry {
     hookKafkajsLogs({ watch: autoWatch })
     if (autoWatch) hookAutoWatch()
     if (env('LOG_NEST_AUTO') !== 'false') hookNestFactory()
+    hookHttpExceptions()
   }
 
   const pipeline = exportPipeline(selection.mode, settings)

@@ -436,11 +436,18 @@ export class AppLogger implements LoggerService {
     if (own.level) return { level: own.level, downgraded: false }
     // A plain error line about a caller mistake (4xx, duplicate) is a
     // warning, unless it made the request answer 5xx: inside a request the
-    // line waits for the status (see held-lines.ts).
+    // line waits for the status (see held-lines.ts). A code the tables give
+    // no level falls back to the status the app answers with.
+    const answer = error?.answerStatus
+    const callerLevel =
+      resolved?.level ??
+      (answer !== undefined && answer >= 400 && answer < 500
+        ? 'warn'
+        : undefined)
     if (
       input.event === 'app.log' &&
       level === 'error' &&
-      resolved?.level === 'warn'
+      callerLevel === 'warn'
     ) {
       return { level: 'warn', downgraded: true }
     }

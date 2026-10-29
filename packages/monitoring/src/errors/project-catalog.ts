@@ -1,6 +1,10 @@
 import { types } from 'util'
 import type { DependencyType } from '../types'
-import type { ErrorCategory, ErrorPattern } from './patterns/types'
+import {
+  ERROR_CATEGORIES,
+  type ErrorCategory,
+  type ErrorPattern,
+} from './patterns/types'
 
 /** One code of the app's own table (src/skilllane-monitoring/errors.ts). */
 export interface ProjectCatalogEntry {
@@ -36,13 +40,6 @@ export interface NormalizedCatalog {
   issues: CatalogIssue[]
 }
 
-const CATEGORIES: readonly ErrorCategory[] = [
-  'bug',
-  'input',
-  'data',
-  'dependency',
-  'config',
-]
 const DEPENDENCIES: readonly DependencyType[] = [
   'redis',
   'oracle',
@@ -132,11 +129,11 @@ export function normalizeCatalog(raw: unknown): NormalizedCatalog {
       pattern.howToFix = cut(entry.howToFix, HOW_TO_FIX_MAX)
     }
     if (entry.category !== undefined) {
-      if (CATEGORIES.includes(entry.category)) {
+      if (ERROR_CATEGORIES.includes(entry.category)) {
         pattern.category = entry.category
       } else {
         problem(
-          `category "${entry.category}" is not one of ${CATEGORIES.join('|')}; ignored`,
+          `category "${entry.category}" is not one of ${ERROR_CATEGORIES.join('|')}; ignored`,
         )
       }
     }
