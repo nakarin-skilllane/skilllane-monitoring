@@ -32,7 +32,13 @@ SDK อ่านไฟล์นี้เองตอนแอป start (ไม�
 3. code อยู่ช่องอื่นของ error (หรือเป็นตัวเลข) ให้เปิด \`codeOf\` ในไฟล์ เช่น \`codeOf: (err) => err.errorCode\`
 4. error ที่ไม่มี code (เช่น \`throw new NotFoundException('User not found')\`) ใช้ \`messageMatch: /^User not found$/\`
    แล้ว \`error.code\` ของบรรทัดนั้นจะเป็นชื่อ key แทน \`HTTP_404\`
-5. ตรวจก่อน deploy (ใช้ใน CI ได้): \`pnpm skilllane-monitoring errors check\`
+5. \`log.ts\` ในโฟลเดอร์นี้ให้ \`log\` ที่ไม่ต้องประกาศ \`new Logger(Class.name)\` ชื่อ class ที่เรียกขึ้นใน \`log.logger\` เอง
+   \`\`\`ts
+   import { log } from '../skilllane-monitoring/log'                       // import จากไฟล์นี้ ไม่ใช่จาก package
+   log.error('Evaluate the exam failed', err)
+   log.warn('Pay failed', { code: AppErrorCode.ORDER_ALREADY_PAID })
+   \`\`\`
+6. ตรวจก่อน deploy (ใช้ใน CI ได้): \`pnpm skilllane-monitoring errors check\`
 
 ## กฎ และผลเมื่อใส่ผิด
 
@@ -84,7 +90,7 @@ custom error catalog: more than one file found; the first is used
 \`\`\`sh
 pnpm skilllane-monitoring uninstall
 \`\`\`
-ลบไฟล์ตาราง, README นี้, โฟลเดอร์ (ถ้าว่าง) และบรรทัด \`import 'skilllane-monitoring/register'\` แล้วถอด package ให้ ถามยืนยันก่อนทุกครั้ง
-ถ้าถอดด้วย \`pnpm remove skilllane-monitoring\` ตรง ๆ ไฟล์ในโฟลเดอร์นี้จะค้าง (ไม่ทำให้ build พัง) ลบเองได้
+ลบไฟล์ตาราง, README นี้ และบรรทัด \`import 'skilllane-monitoring/register'\` เขียน \`log.ts\` ใหม่เป็น \`new Logger()\` ของ Nest (โค้ดที่ import ยัง build ผ่าน) แล้วถอด package ให้ ถามยืนยันก่อนทุกครั้ง
+ถ้าถอดด้วย \`pnpm remove skilllane-monitoring\` ตรง ๆ build จะพัง เพราะ \`errors.ts\` และ \`log.ts\` import จาก SDK ต้องลบ \`errors.ts\` และแก้ \`log.ts\` เอง
 `
 }

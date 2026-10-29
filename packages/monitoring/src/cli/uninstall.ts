@@ -12,6 +12,7 @@ import { dirname, join, relative, resolve } from 'path'
 import { createInterface } from 'readline'
 import { DEFAULT_PATH } from './errors-init'
 import { README_MARKER } from './readme-template'
+import { LOG_MARKER, renderNestLogFile } from './template'
 
 export interface Ref {
   file: string
@@ -22,6 +23,8 @@ export interface Ref {
 export interface UninstallPlan {
   deleteFiles: string[]
   deleteDirs: string[]
+  /** The generated log.ts: app code imports it, so it becomes Nest's Logger. */
+  rewriteFiles: string[]
   /** Bare register imports and `import type {} from 'skilllane-monitoring'`, removed. */
   lineEdits: Ref[]
   /** Other uses of the SDK: the build breaks without the package. */
@@ -81,6 +84,7 @@ export function planUninstall(o: {
   const plan: UninstallPlan = {
     deleteFiles: [],
     deleteDirs: [],
+    rewriteFiles: [],
     lineEdits: [],
     blockers: [],
     outside: [],
@@ -98,6 +102,13 @@ export function planUninstall(o: {
       ours.push(readme)
     }
     plan.deleteFiles.push(...ours.map((f) => relative(o.cwd, f)))
+    const logFile = join(folder, 'log.ts')
+    if (
+      existsSync(logFile) &&
+      readFileSync(logFile, 'utf8').split('\n')[0] === LOG_MARKER
+    ) {
+      plan.rewriteFiles.push(relative(o.cwd, logFile))
+    }
     const others = readdirSync(folder).filter(
       (name) => !ours.includes(join(folder, name)),
     )
@@ -108,7 +119,8 @@ export function planUninstall(o: {
   const srcDir = join(o.cwd, 'src')
   if (existsSync(srcDir)) {
     for (const file of sourceFiles(srcDir)) {
-      if (file === catalog) continue
+      if (file === catalog || plan.rewriteFiles.includes(relative(o.cwd, file)))
+        continue
       readFileSync(file, 'utf8')
         .split('\n')
         .forEach((text, i) => {
@@ -155,6 +167,9 @@ export function applyUninstall(plan: UninstallPlan, cwd: string): void {
       .filter((_, i) => !lines.has(i + 1))
     writeFileSync(full, kept.join('\n'))
   }
+  for (const file of plan.rewriteFiles) {
+    writeFileSync(join(cwd, file), renderNestLogFile())
+  }
   for (const file of plan.deleteFiles) rmSync(join(cwd, file))
   for (const dir of plan.deleteDirs) rmdirSync(join(cwd, dir))
 }
@@ -198,6 +213,10 @@ export async function uninstall(o: {
   if (plan.deleteFiles.length || plan.deleteDirs.length) {
     out('Delete:')
     for (const f of [...plan.deleteFiles, ...plan.deleteDirs]) out(`  ${f}`)
+  }
+  if (plan.rewriteFiles.length) {
+    out("Rewrite to Nest's Logger (imports of it keep working):")
+    for (const f of plan.rewriteFiles) out(`  ${f}`)
   }
   show('Remove these lines:', plan.lineEdits)
   show(

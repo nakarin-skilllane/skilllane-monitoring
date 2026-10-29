@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { dirname, join, relative, resolve } from 'path'
 import { renderReadme } from './readme-template'
 import { scanSource } from './scan'
-import { renderCatalogFile } from './template'
+import { renderCatalogFile, renderLogFile } from './template'
 
 export const DEFAULT_PATH = 'src/skilllane-monitoring/errors.ts'
 
@@ -27,6 +27,15 @@ export function errorsInit(o: {
     writeFileSync(target, renderCatalogFile(scan))
     out(
       `created ${rel}: ${scan.errorCodes.length + scan.loggerCodes.length} codes, ${scan.repeatedMessages.length} repeated messages to fill in`,
+    )
+  }
+  const logFile = join(dirname(target), 'log.ts')
+  if (existsSync(logFile)) {
+    out(`${relative(o.cwd, logFile)} already exists; not overwritten`)
+  } else {
+    writeFileSync(logFile, renderLogFile())
+    out(
+      `created ${relative(o.cwd, logFile)}: import { log } from it instead of new Logger(Class.name)`,
     )
   }
   const readme = join(dirname(target), 'README.md')

@@ -44,6 +44,20 @@ throw new BadRequestException('Coupon has expired', { howToFix: 'Ask for another
 await tracked('cache:rebuild_product_list', () => this.rebuild())
 ```
 
+Or `log`, with no logger to declare: each line goes under the class that
+called it (`log.logger`) and says where (`log.origin.*`). It takes the same
+arguments, except that a trailing string is a value, never the context. Import
+it from the `log.ts` that `errors init` writes, not from the package:
+`uninstall` turns that file into Nest's `Logger`, so the app still builds.
+Finding the caller costs about 12 µs a line. With `LOGGING_ENGINE=legacy` it
+writes through Nest's logger, with the class as context.
+
+```ts
+import { log } from '../skilllane-monitoring/log'
+
+log.error('Evaluate the exam failed', err)   // log.logger: ExamEvaluationService
+```
+
 `ErrorCode.<file>.<CODE>` lists every built-in code (`ORA-00001` is
 `ErrorCode.oracle.ORA_00001`). A plain object next to a code, or one with
 `code`, may set `message`, `hint`, `detail`, `howToFix`, `category`, `level`,
@@ -91,9 +105,9 @@ get a hint, category and level from one catalog file, without changing any
 `throw` or `this.logger.*` call:
 
 ```sh
-pnpm skilllane-monitoring errors init    # draft src/skilllane-monitoring/errors.ts + README.md from src/
+pnpm skilllane-monitoring errors init    # draft src/skilllane-monitoring/errors.ts + log.ts + README.md from src/
 pnpm skilllane-monitoring errors check   # check it before deploying; exit 1 on a broken rule (CI)
-pnpm skilllane-monitoring uninstall      # remove the catalog, the register imports and the package
+pnpm skilllane-monitoring uninstall      # remove the catalog, the register imports and the package; log.ts becomes Nest's Logger
 ```
 
 `init` drafts every `errorCode: '…'`, logger `code: '…'` and

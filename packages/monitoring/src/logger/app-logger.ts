@@ -8,7 +8,7 @@ import {
 } from '../catalog'
 import { type HintVars, lookupHint } from '../errors/hints'
 import { serializeError } from '../errors/error-serializer'
-import { originOf } from '../errors/origin'
+import { type Caller, callerOf, originOf } from '../errors/origin'
 import {
   type DependencyType,
   LEVEL_WEIGHT,
@@ -136,6 +136,11 @@ export class AppLogger implements LoggerService {
     this.fromCall('fatal', message, params)
   }
 
+  /** A line from `log`: no context argument; the code that called names it. */
+  fromLog(level: LogLevel, message: unknown, params: unknown[]): void {
+    this.fromCall(level, message, params, true)
+  }
+
   // ---- Library events ------------------------------------------------------
 
   isLevelEnabled(level: LogLevel): boolean {
@@ -160,12 +165,17 @@ export class AppLogger implements LoggerService {
 
   // ---- Pipeline ------------------------------------------------------------
 
-  private fromCall(level: LogLevel, message: unknown, params: unknown[]) {
+  private fromCall(
+    level: LogLevel,
+    message: unknown,
+    params: unknown[],
+    fromLog = false,
+  ) {
     // a `level` override may raise the line, so 'error' still has to be parsed
     if (!this.isLevelEnabled(level) && !this.isLevelEnabled('error')) return
     let parsed: ReturnType<typeof parseArgs>
     try {
-      parsed = parseArgs(message, params)
+      parsed = parseArgs(message, params, !fromLog)
     } catch {
       parsed = { message: String(message), options: {}, fields: {}, labels: {} }
     }
@@ -182,21 +192,28 @@ export class AppLogger implements LoggerService {
           },
         )
     }
+    let caller: Caller | undefined
+    try {
+      caller = fromLog ? callerOf(new Error().stack) : undefined
+    } catch {
+      caller = undefined
+    }
     // A code with no error object has no stack: take the caller's.
     const callStack =
-      parsed.options.code && parsed.error === undefined
+      !caller && parsed.options.code && parsed.error === undefined
         ? new Error().stack
         : undefined
     this.emit({
       level,
       event,
-      logger: parsed.context ?? 'App',
+      logger: parsed.context ?? caller?.logger ?? 'App',
       message: parsed.message,
       error: parsed.error,
       fields: parsed.fields,
       labels: parsed.labels,
       options: parsed.options,
       callStack,
+      caller,
     })
   }
 
@@ -211,6 +228,7 @@ export class AppLogger implements LoggerService {
     options: LogOptions
     hintVars?: HintVars
     callStack?: string
+    caller?: Caller
   }) {
     let level = input.level
     const record: Record<string, unknown> = {
@@ -245,6 +263,11 @@ export class AppLogger implements LoggerService {
       waitForStatus = decided.downgraded
     } catch {
       // keep the line without error details
+    }
+    // `log` knows its caller on every line; where an error was thrown wins.
+    if (input.caller) {
+      record['log.origin.function'] ??= input.caller.function
+      record['log.origin.file.name'] ??= input.caller.file
     }
     record['log.level'] = level
     let scope: ReturnType<typeof currentScope>

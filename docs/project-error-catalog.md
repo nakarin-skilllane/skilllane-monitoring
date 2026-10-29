@@ -13,6 +13,7 @@ pnpm skilllane-monitoring errors init
 สร้าง `src/skilllane-monitoring/` พร้อม 2 ไฟล์:
 
 - `errors.ts` ตาราง error ร่างจากของที่แอปใช้อยู่จริง (`errorCode` ของ exception, ข้อความ `throw new …Exception('…')` ที่ซ้ำหลายที่, `code` ใน `this.logger.*`) ทีมเติม `hint` เอง
+- `log.ts` ส่ง `log` ของ SDK ต่อให้โค้ดของแอป: `import { log } from '../skilllane-monitoring/log'` แล้ว `log.error('…', err)` ได้โดยไม่ต้องประกาศ `new Logger(Class.name)` ชื่อ class ที่เรียกขึ้นใน `log.logger` เอง
 - `README.md` วิธีใช้ กฎ ข้อจำกัด และวิธีตั้ง path (เนื้อหาเหมือนเอกสารนี้ อ่านได้โดยไม่ต้องเปิดที่อื่น)
 
 ไม่เขียนทับไฟล์ที่มีอยู่ · `--path src/common/config/monitoring-errors.ts` วางที่อื่นได้ (ดู "ตำแหน่งไฟล์") · `--min-repeat 10` เปลี่ยนเกณฑ์ข้อความซ้ำ
@@ -124,9 +125,9 @@ SKILLLANE_MONITORING_ERRORS_FILE_PATH=src/common/config/monitoring-errors.ts
 pnpm skilllane-monitoring uninstall          # ถามยืนยันก่อน · --yes ข้ามคำถาม · --force ถอดแม้ยังมี import อื่น
 ```
 
-1. แสดงแผน: ไฟล์ตารางและ `README.md` ที่ `init` สร้าง (README ที่ทีมเขียนเองไม่ลบ) ลบโฟลเดอร์เมื่อว่างแล้ว · บรรทัด `import 'skilllane-monitoring/register'` ใน `src/` ที่จะลบ (เช่น `main.ts`, `instrumentation.ts`) · import / require อื่นของ SDK ที่ต้องแก้เอง · การอ้างถึงนอก `src/` (`NODE_OPTIONS` ใน `Dockerfile`, script, `.env`) ที่ไม่แก้ให้
+1. แสดงแผน: ไฟล์ตารางและ `README.md` ที่ `init` สร้าง (README ที่ทีมเขียนเองไม่ลบ) ลบโฟลเดอร์เมื่อว่างแล้ว · `log.ts` ที่ `init` สร้างไม่ลบ แต่เขียนใหม่เป็น `export const log = new Logger()` ของ Nest โค้ดที่ import ไฟล์นี้จึงยัง build ผ่าน (แต่บรรทัดไม่มีชื่อ class แล้ว) · บรรทัด `import 'skilllane-monitoring/register'` ใน `src/` ที่จะลบ (เช่น `main.ts`, `instrumentation.ts`) · import / require อื่นของ SDK ที่ต้องแก้เอง · การอ้างถึงนอก `src/` (`NODE_OPTIONS` ใน `Dockerfile`, script, `.env`) ที่ไม่แก้ให้
 2. หยุด (exit 1) ถ้ายังมี import อื่นของ SDK เพราะ build จะพังหลังถอด เว้นแต่ `--force`
 3. ถาม `Continue? (y/N)` ตอบอย่างอื่น = ไม่แก้อะไร
 4. ลบไฟล์และบรรทัด แล้วรัน `pnpm remove skilllane-monitoring` (เลือก pnpm / yarn / npm ตาม lockfile)
 
-pnpm และ npm ไม่ให้ package ลบไฟล์เองตอนถูกถอด ถ้าถอดด้วย `pnpm remove skilllane-monitoring` ตรง ๆ โฟลเดอร์ `src/skilllane-monitoring/` จะค้าง (ไม่ทำให้ build พัง เพราะไฟล์ไม่ import อะไรจาก SDK) ลบเองได้
+pnpm และ npm ไม่ให้ package ลบไฟล์เองตอนถูกถอด ถ้าถอดด้วย `pnpm remove skilllane-monitoring` ตรง ๆ โฟลเดอร์ `src/skilllane-monitoring/` จะค้าง และ build พังเพราะ `errors.ts` กับ `log.ts` import จาก SDK ให้ใช้ `uninstall` หรือลบ `errors.ts` และแก้ `log.ts` เป็น `new Logger()` ของ Nest เอง

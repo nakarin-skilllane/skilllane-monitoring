@@ -8,6 +8,7 @@ import {
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { describe, expect, it } from 'vitest'
+import { renderLogFile, renderNestLogFile } from '../src/cli/template'
 import { planUninstall, uninstall } from '../src/cli/uninstall'
 
 function project(files: Record<string, string>): string {
@@ -130,6 +131,64 @@ describe('planUninstall', () => {
       },
     ])
     expect(plan.blockers).toEqual([])
+  })
+})
+
+describe('planUninstall and log.ts', () => {
+  const WITH_LOG = {
+    ...APP,
+    'src/skilllane-monitoring/log.ts': renderLogFile(),
+    'src/exam.service.ts': `import { log } from './skilllane-monitoring/log'\n`,
+  }
+
+  it("rewrites the generated log.ts to Nest's Logger and keeps the folder", () => {
+    const plan = planUninstall({ cwd: project(WITH_LOG) })
+    expect(plan.rewriteFiles).toEqual(['src/skilllane-monitoring/log.ts'])
+    expect(plan.deleteFiles).toEqual([
+      'src/skilllane-monitoring/errors.ts',
+      'src/skilllane-monitoring/README.md',
+    ])
+    expect(plan.deleteDirs).toEqual([])
+    expect(plan.blockers).toEqual([])
+  })
+
+  it('treats a log.ts the team wrote as their own code', () => {
+    const plan = planUninstall({
+      cwd: project({
+        ...APP,
+        'src/skilllane-monitoring/log.ts': `export { log } from 'skilllane-monitoring'\n`,
+      }),
+    })
+    expect(plan.rewriteFiles).toEqual([])
+    expect(plan.blockers).toEqual([
+      {
+        file: 'src/skilllane-monitoring/log.ts',
+        line: 1,
+        text: `export { log } from 'skilllane-monitoring'`,
+      },
+    ])
+  })
+
+  it('leaves the app building: imports of log.ts keep working', async () => {
+    const root = project(WITH_LOG)
+    const r = run()
+    const out: string[] = []
+    await uninstall({
+      cwd: root,
+      yes: true,
+      run: r.fn,
+      out: (l) => out.push(l),
+    })
+    expect(
+      readFileSync(join(root, 'src/skilllane-monitoring/log.ts'), 'utf8'),
+    ).toBe(renderNestLogFile())
+    expect(existsSync(join(root, 'src/skilllane-monitoring/errors.ts'))).toBe(
+      false,
+    )
+    expect(out).toContain(
+      "Rewrite to Nest's Logger (imports of it keep working):",
+    )
+    expect(out).toContain('  src/skilllane-monitoring/log.ts')
   })
 })
 

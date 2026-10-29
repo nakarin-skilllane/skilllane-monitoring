@@ -14,7 +14,7 @@ import { errorsCheck } from '../src/cli/errors-check'
 import { errorsInit } from '../src/cli/errors-init'
 import { runCli } from '../src/cli/index'
 import { scanSource } from '../src/cli/scan'
-import { renderCatalogFile } from '../src/cli/template'
+import { LOG_MARKER, renderCatalogFile } from '../src/cli/template'
 
 function project(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), 'slm-cli-'))
@@ -148,6 +148,36 @@ describe('errors init', () => {
         ts.flattenDiagnosticMessageText(d.messageText, '\n'),
       ),
     ).toEqual([])
+  })
+
+  it('writes log.ts next to the catalog: log from the SDK, imported through the app', () => {
+    const root = project({})
+    const out: string[] = []
+    errorsInit({ cwd: root, out: (l) => out.push(l) })
+    const file = readFileSync(
+      join(root, 'src/skilllane-monitoring/log.ts'),
+      'utf8',
+    )
+    expect(file.split('\n')[0]).toBe(LOG_MARKER)
+    expect(file).toContain(`export { log } from 'skilllane-monitoring'`)
+    expect(out).toContain(
+      'created src/skilllane-monitoring/log.ts: import { log } from it instead of new Logger(Class.name)',
+    )
+  })
+
+  it('adds log.ts to an app that has the catalog, and never overwrites one', () => {
+    const root = project({ 'src/skilllane-monitoring/errors.ts': 'keep me' })
+    errorsInit({ cwd: root, out: () => {} })
+    expect(existsSync(join(root, 'src/skilllane-monitoring/log.ts'))).toBe(true)
+    writeFileSync(join(root, 'src/skilllane-monitoring/log.ts'), 'ours')
+    const out: string[] = []
+    errorsInit({ cwd: root, out: (l) => out.push(l) })
+    expect(
+      readFileSync(join(root, 'src/skilllane-monitoring/log.ts'), 'utf8'),
+    ).toBe('ours')
+    expect(out).toContain(
+      'src/skilllane-monitoring/log.ts already exists; not overwritten',
+    )
   })
 
   it('never overwrites a README the team wrote', () => {
