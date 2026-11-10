@@ -58,7 +58,17 @@ function scopedKey(dependency: string | undefined, key: string): string {
 interface PatternIndex {
   byKey: Map<string, ErrorPattern>
   byMessage: ErrorPattern[]
+  /**
+   * The message scan's answer per (dependency, message), null for none: an
+   * error that repeats skips the regexes. It lives on the index, so a new app
+   * catalog (a new index) starts empty.
+   */
+  scanned: Map<string, ErrorPattern | null>
 }
+
+const MAX_SCANNED = 1_000
+/** Longer messages carry ids or payloads: they rarely repeat, and are not kept. */
+const MAX_SCANNED_MESSAGE = 512
 
 interface Match {
   pattern: ErrorPattern
@@ -76,7 +86,11 @@ function indexPatterns(
   patterns: readonly ErrorPattern[],
   scoped: boolean,
 ): PatternIndex {
-  const index: PatternIndex = { byKey: new Map(), byMessage: [] }
+  const index: PatternIndex = {
+    byKey: new Map(),
+    byMessage: [],
+    scanned: new Map(),
+  }
   for (const pattern of patterns) {
     index.byKey.set(
       scopedKey(scoped ? pattern.dependency : undefined, pattern.key),
@@ -211,12 +225,31 @@ function findIn(
     if (found) return { pattern: found, byMessage: false }
   }
   if (!message) return undefined
+  const found = scanMessage(index, message, dependency)
+  return found ? { pattern: found, byMessage: true } : undefined
+}
+
+function scanMessage(
+  index: PatternIndex,
+  message: string,
+  dependency: DependencyType | undefined,
+): ErrorPattern | undefined {
+  const keep = message.length <= MAX_SCANNED_MESSAGE
+  const cacheKey = `${dependency ?? ''}\0${message}`
+  if (keep) {
+    const known = index.scanned.get(cacheKey)
+    if (known !== undefined) return known ?? undefined
+  }
   const found = index.byMessage.find(
     (pattern) =>
       (!pattern.dependency || pattern.dependency === dependency) &&
       pattern.messageMatch!.test(message),
   )
-  return found ? { pattern: found, byMessage: true } : undefined
+  if (keep) {
+    if (index.scanned.size >= MAX_SCANNED) index.scanned.clear()
+    index.scanned.set(cacheKey, found ?? null)
+  }
+  return found
 }
 
 /** The app's table first, then the built-in one. */

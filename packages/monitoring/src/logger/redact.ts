@@ -23,7 +23,6 @@ export {
 const TEXT_FIELDS = [
   'message',
   'error.message',
-  'error.stack_trace',
   'error.hint',
   'error.detail',
   'error.how_to_fix',
@@ -35,6 +34,22 @@ const TEXT_FIELDS = [
 const VALUE_FIELDS = ['user.id', 'url.domain']
 /** Where a dependency is: a URL or `user:password@host` (the password). */
 const ENDPOINT_FIELDS = ['dependency.name', 'dependency.host']
+
+/** A V8 frame line: `    at fn (file:line:col)`. */
+const FRAME_LINE = /^\s+at\s/
+
+/**
+ * A stack trace: the value rule on its message lines. Frame lines are
+ * paths and positions, never values, and they are most of the text.
+ */
+function redactStack(stack: string): string {
+  if (!stack.includes('\n')) return redactText(stack)
+  const lines = stack.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    if (!FRAME_LINE.test(lines[i])) lines[i] = redactText(lines[i])
+  }
+  return lines.join('\n')
+}
 
 function redactCause(cause: any, depth = 0): any {
   if (!cause || typeof cause !== 'object' || depth > 3) return cause
@@ -69,6 +84,11 @@ export function redactRecord(record: Record<string, unknown>): string[] {
       record[key] = redactText(record[key] as string)
     }
   }
+  if (typeof record['error.stack_trace'] === 'string') {
+    record['error.stack_trace'] = redactStack(
+      record['error.stack_trace'] as string,
+    )
+  }
   for (const key of VALUE_FIELDS) {
     if (typeof record[key] === 'string')
       record[key] = redactValue(record[key] as string)
@@ -96,14 +116,15 @@ export function redactRecord(record: Record<string, unknown>): string[] {
   }
   const labels = record.labels as Record<string, string> | undefined
   if (labels) {
-    const entries = Object.entries(labels).slice(0, MAX_LABELS)
     // The key rule, as on every other key: the label stays, its value does not.
-    record.labels = Object.fromEntries(
-      entries.map(([key, value]) => [
-        key,
-        isSensitiveKey(key) ? REDACTED : redactText(String(value)),
-      ]),
-    )
+    let count = 0
+    for (const key in labels) {
+      if (count++ >= MAX_LABELS) delete labels[key]
+      else
+        labels[key] = isSensitiveKey(key)
+          ? REDACTED
+          : redactText(String(labels[key]))
+    }
   }
   return dropped
 }

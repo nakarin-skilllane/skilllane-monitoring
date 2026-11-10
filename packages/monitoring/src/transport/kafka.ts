@@ -7,6 +7,8 @@ import {
   topicName,
 } from '../contract'
 import type { Producer, SASLOptions } from 'kafkajs'
+import { AsyncLocalStorage } from 'async_hooks'
+import { gunzip, gzip } from 'zlib'
 import { env } from '../otel/identity'
 import { KAFKAJS_UNPATCHED, markInternal } from './internal'
 import { noop, type OutgoingMessage, type Transport } from './types'
@@ -38,6 +40,44 @@ function unrefSocketFactory() {
 
 const SDK_CLIENT_IDS = new Set<string>()
 let requestQueuePatched = false
+
+/**
+ * The SDK's own messages gzip at level 1: JSON lines shrink almost as far as
+ * at zlib's default (6) in about a fifth of the CPU. kafkajs has one codec
+ * registry for the process, so the level travels with the SDK's send (async
+ * context) and the app's own producers keep the default.
+ */
+const FAST_GZIP_LEVEL = 1
+const gzipLevel = new AsyncLocalStorage<number>()
+let gzipCodecInstalled = false
+
+export function withFastGzip<T>(fn: () => T): T {
+  return gzipLevel.run(FAST_GZIP_LEVEL, fn)
+}
+
+export function installGzipCodec(kafkajs: any): void {
+  if (gzipCodecInstalled) return
+  gzipCodecInstalled = true
+  try {
+    const codec = {
+      compress: (encoder: { buffer: Buffer }) =>
+        new Promise<Buffer>((resolve, reject) => {
+          const level = gzipLevel.getStore()
+          const done = (error: Error | null, out: Buffer) =>
+            error ? reject(error) : resolve(out)
+          if (level === undefined) gzip(encoder.buffer, done)
+          else gzip(encoder.buffer, { level }, done)
+        }),
+      decompress: (buffer: Buffer) =>
+        new Promise<Buffer>((resolve, reject) => {
+          gunzip(buffer, (error, out) => (error ? reject(error) : resolve(out)))
+        }),
+    }
+    kafkajs.CompressionCodecs[kafkajs.CompressionTypes.GZIP] = () => codec
+  } catch {
+    // another kafkajs layout: its own gzip codec stays
+  }
+}
 
 /**
  * kafkajs 2.2.4: after every response an idle connection re-arms a 1 ms
@@ -117,6 +157,7 @@ export class KafkaTransport implements Transport {
     const kafkajs = require('kafkajs')
     SDK_CLIENT_IDS.add(this.clientId)
     patchIdleRequestQueue()
+    installGzipCodec(kafkajs)
     this.gzip = kafkajs.CompressionTypes.GZIP
     // The hook's subclass would watch this producer as an app dependency.
     const Kafka = kafkajs.Kafka[KAFKAJS_UNPATCHED] ?? kafkajs.Kafka
@@ -160,21 +201,23 @@ export class KafkaTransport implements Transport {
   ): Promise<void> {
     const producer = this.producer
     if (!producer) throw new Error('Kafka producer is not connected')
-    await producer.send({
-      topic: topicName(stream),
-      compression: this.gzip,
-      acks: -1,
-      messages: [
-        {
-          key: message.key,
-          value: message.body,
-          headers: {
-            [HEADER_STREAM]: stream,
-            [HEADER_VERSION]: String(CONTRACT_VERSION),
+    await withFastGzip(() =>
+      producer.send({
+        topic: topicName(stream),
+        compression: this.gzip,
+        acks: -1,
+        messages: [
+          {
+            key: message.key,
+            value: message.body,
+            headers: {
+              [HEADER_STREAM]: stream,
+              [HEADER_VERSION]: String(CONTRACT_VERSION),
+            },
           },
-        },
-      ],
-    })
+        ],
+      }),
+    )
   }
 
   async close(): Promise<void> {

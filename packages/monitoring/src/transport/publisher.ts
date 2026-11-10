@@ -113,13 +113,17 @@ export interface PublisherSettings {
   sendTimeoutMs: number
 }
 
+/**
+ * One queued item, UTF-8 encoded at push time: its size is then exact, the
+ * bytes live outside the V8 heap, and a message is a copy of its parts
+ * rather than a join of strings encoded again.
+ */
 interface Entry {
-  json: string
-  /** UTF-8 bytes on the wire. */
-  bytes: number
-  /** Heap the string holds: V8 keeps a string with any character above U+00FF at 2 bytes per character. */
-  cost: number
+  body: Buffer
 }
+
+const COMMA = Buffer.from(',')
+const TAIL = Buffer.from(']}')
 
 /** Makes an item that is over `maxBytes` encoded smaller (spans: cut their largest captured values); undefined: cannot. */
 export type FitItem = (item: unknown, maxBytes: number) => unknown
@@ -138,12 +142,12 @@ const BREAKER_MAX_PAUSE_MS = 30_000
  * LOG_EXPORT_BATCH_SIZE items, each under LOG_EXPORT_MAX_BYTES; an item over
  * it is made smaller by `fit` (a span's largest captured values are cut)
  * rather than dropped. A full queue (LOG_EXPORT_MAX_QUEUE items, or
- * LOG_EXPORT_MAX_QUEUE_BYTES of heap held by the waiting items) drops its
- * oldest items; a failing queue pauses and keeps its items.
+ * LOG_EXPORT_MAX_QUEUE_BYTES held by the waiting items) drops its oldest
+ * items; a failing queue pauses and keeps its items.
  */
 export class Publisher {
   private queue: Entry[] = []
-  /** Heap held by the queued items (Entry.cost). */
+  /** Bytes held by the queued items. */
   private queuedBytes = 0
   private readonly itemMax: number
   private timer?: NodeJS.Timeout
@@ -168,22 +172,25 @@ export class Publisher {
     this.itemMax = settings.maxBytes - Buffer.byteLength(head) - ENVELOPE_SLACK
   }
 
-  push(item: unknown): void {
+  /** `json`: the item already serialized (the line stdout got), when the caller has it. */
+  push(item: unknown, json?: string): void {
     if (this.closed) return
     try {
-      let json = safeJson(item as Record<string, unknown>)
-      let bytes = Buffer.byteLength(json)
-      if (bytes > this.itemMax && this.fit) {
+      let body = Buffer.from(
+        json ?? safeJson(item as Record<string, unknown>),
+        'utf8',
+      )
+      if (body.length > this.itemMax && this.fit) {
         const smaller = this.fit(item, this.itemMax)
         if (smaller !== undefined) {
-          json = safeJson(smaller as Record<string, unknown>)
-          bytes = Buffer.byteLength(json)
+          body = Buffer.from(
+            safeJson(smaller as Record<string, unknown>),
+            'utf8',
+          )
         }
       }
-      // All ASCII (as many bytes as characters): one byte per character; else assume two.
-      const cost = bytes === json.length ? bytes : json.length * 2
-      this.queue.push({ json, bytes, cost })
-      this.queuedBytes += cost
+      this.queue.push({ body })
+      this.queuedBytes += body.length
       this.trim()
       this.schedule()
     } catch {
@@ -221,20 +228,23 @@ export class Publisher {
   private trim(): void {
     let count = Math.max(0, this.queue.length - this.settings.maxQueue)
     let bytes = this.queuedBytes
-    for (let i = 0; i < count; i++) bytes -= this.queue[i].cost
+    for (let i = 0; i < count; i++) bytes -= this.queue[i].body.length
     while (
       bytes > this.settings.maxQueueBytes &&
       count < this.queue.length - 1
     ) {
-      bytes -= this.queue[count].cost
+      bytes -= this.queue[count].body.length
       count++
     }
     if (count > 0) this.discard(count, 'queue full')
   }
 
   private removeOldest(count: number): Entry[] {
-    const entries = this.queue.splice(0, count)
-    for (const entry of entries) this.queuedBytes -= entry.cost
+    // A full queue drops one item per push: shift() is O(1) in V8 (it trims
+    // the front in place), splice(0, 1) copies the whole queue down.
+    const entries =
+      count === 1 ? [this.queue.shift()!] : this.queue.splice(0, count)
+    for (const entry of entries) this.queuedBytes -= entry.body.length
     return entries
   }
 
@@ -308,7 +318,7 @@ export class Publisher {
         }
         // Keep them, oldest first; the queue bounds still apply.
         this.queue.unshift(...batch.entries)
-        for (const entry of batch.entries) this.queuedBytes += entry.cost
+        for (const entry of batch.entries) this.queuedBytes += entry.body.length
         this.trim()
         this.failed(error)
         return
@@ -319,15 +329,16 @@ export class Publisher {
 
   /** Up to batchSize items whose envelope stays under maxBytes. */
   private take(): { entries: Entry[]; message: OutgoingMessage } | undefined {
-    const head =
+    const head = Buffer.from(
       `{"v":${CONTRACT_VERSION},"stream":"${this.stream}",` +
-      `"resource":${this.resourceJson},"sentAt":"${new Date().toISOString()}","items":[`
-    const tail = ']}'
-    let bytes = Buffer.byteLength(head) + tail.length
+        `"resource":${this.resourceJson},"sentAt":"${new Date().toISOString()}","items":[`,
+      'utf8',
+    )
+    let bytes = head.length + TAIL.length
     const max = Math.min(this.settings.batchSize, this.queue.length)
     let count = 0
     while (count < max) {
-      const next = this.queue[count].bytes + (count ? 1 : 0)
+      const next = this.queue[count].body.length + (count ? 1 : 0)
       if (bytes + next > this.settings.maxBytes) break
       bytes += next
       count++
@@ -337,10 +348,13 @@ export class Publisher {
       return undefined
     }
     const entries = this.removeOldest(count)
-    const body = Buffer.from(
-      head + entries.map((entry) => entry.json).join(',') + tail,
-      'utf8',
-    )
+    const parts: Buffer[] = [head]
+    for (let i = 0; i < entries.length; i++) {
+      if (i) parts.push(COMMA)
+      parts.push(entries[i].body)
+    }
+    parts.push(TAIL)
+    const body = Buffer.concat(parts, bytes)
     return { entries, message: { body, key: this.key, count } }
   }
 

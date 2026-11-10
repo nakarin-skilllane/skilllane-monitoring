@@ -22,12 +22,22 @@ function isLibraryFile(file: string): boolean {
  * so the source path is known without source maps or line numbers.
  */
 export function sourcePath(file: string, cwd = process.cwd()): string {
+  // The same few files throw again and again: their paths are kept.
+  const cacheKey = `${cwd}\0${file}`
+  const known = sourcePaths.get(cacheKey)
+  if (known !== undefined) return known
   const path = (file.startsWith(sep) ? relative(cwd, file) : file)
     .split(sep)
     .join('/')
   const compiled = path.match(/^(?:.*\/)?dist\/(src\/.*)\.js$/)
-  return compiled ? `${compiled[1]}.ts` : path
+  const source = compiled ? `${compiled[1]}.ts` : path
+  if (sourcePaths.size >= MAX_SOURCE_PATHS) sourcePaths.clear()
+  sourcePaths.set(cacheKey, source)
+  return source
 }
+
+const MAX_SOURCE_PATHS = 1_000
+const sourcePaths = new Map<string, string>()
 
 function functionName(name: string): string | undefined {
   const cleaned = name

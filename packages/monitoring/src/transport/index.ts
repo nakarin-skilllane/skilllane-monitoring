@@ -143,7 +143,7 @@ export function createQueueExport(
       mode === 'http'
         ? link.describe()
         : `${link.describe()} (${topicName('logs')}, ${topicName('spans')})`,
-    logSink: (record) => logs.push(record),
+    logSink: (record, _level, json) => logs.push(record, json),
     spanProcessor: new QueueSpanProcessor(spans, settings.shutdownMs),
     flush(timeoutMs = settings.shutdownMs) {
       const deadline = Date.now() + timeoutMs

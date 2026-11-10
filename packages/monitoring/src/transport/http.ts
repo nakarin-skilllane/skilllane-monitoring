@@ -17,6 +17,9 @@ import {
 
 const gzip = promisify(gzipCallback)
 
+/** Level 1: JSON lines shrink almost as far as at zlib's default (6) in about a third of the CPU. */
+const GZIP_LEVEL = 1
+
 /** Bodies under this many bytes go out as they are: gzip would not pay. */
 const GZIP_FROM_BYTES = 1_024
 
@@ -91,7 +94,7 @@ export class HttpTransport implements Transport {
     if (this.token) headers.authorization = `Bearer ${this.token}`
     let body: Buffer = message.body
     if (body.length >= GZIP_FROM_BYTES) {
-      body = await gzip(body)
+      body = await gzip(body, { level: GZIP_LEVEL })
       headers['content-encoding'] = 'gzip'
     }
     const response = await fetch(`${this.base}${INGEST_PATH}/${stream}`, {

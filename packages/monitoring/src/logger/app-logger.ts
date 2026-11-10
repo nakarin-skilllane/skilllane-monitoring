@@ -27,7 +27,12 @@ import { serviceIdentity } from '../otel/identity'
 import { canHold, holdLine } from './held-lines'
 import { redactRecord, stripQuery } from './redact'
 import { recordSink } from './sink'
-import { createJsonWriter, createPrettyWriter, type LineWriter } from './writer'
+import {
+  createJsonWriter,
+  createPrettyWriter,
+  type LineWriter,
+  safeJson,
+} from './writer'
 
 /** The SDK's own files (src/ or dist/): never the place a line was logged from. */
 const SDK_DIR = dirname(__dirname) + sep
@@ -245,10 +250,14 @@ export class AppLogger implements LoggerService {
     try {
       const context = contextFields(this.resolveUser)
       const contextLabels = context.labels as Record<string, string> | undefined
-      delete context.labels
-      Object.assign(record, context)
-      const labels = { ...contextLabels, ...input.labels }
-      if (Object.keys(labels).length) record.labels = labels
+      for (const key in context) {
+        if (key !== 'labels') record[key] = context[key]
+      }
+      // `input.labels` is this line's own object: merged only when the context adds some.
+      const labels = contextLabels
+        ? { ...contextLabels, ...input.labels }
+        : input.labels
+      if (hasKeys(labels)) record.labels = labels
     } catch {
       // context is optional
     }
@@ -337,8 +346,15 @@ export class AppLogger implements LoggerService {
   private output(record: Record<string, unknown>, level: LogLevel): void {
     if (!this.isLevelEnabled(level)) return
     record['log.level'] = level
+    // A JSON writer gets the line serialized here, once for it and the exporter.
+    let json: string | undefined
     try {
-      this.write(record, level)
+      if (this.write.json) {
+        json = safeJson(record)
+        this.write.json(json)
+      } else {
+        this.write(record, level)
+      }
     } catch {
       try {
         process.stdout.write(`${JSON.stringify(record)}\n`)
@@ -349,7 +365,7 @@ export class AppLogger implements LoggerService {
     // The exporter gets the same redacted record stdout got. It only
     // enqueues; a failure here never reaches the caller.
     try {
-      recordSink()?.(record, level)
+      recordSink()?.(record, level, json)
     } catch {
       // stdout already has the line
     }
@@ -371,6 +387,22 @@ export class AppLogger implements LoggerService {
     const { options } = input
     const error =
       input.error !== undefined ? serializeError(input.error) : undefined
+
+    // The usual line: no error and no code, so no table to consult.
+    if (!error && !options.code) {
+      if (options.reason) record.reason = options.reason
+      if (options.hint !== undefined) record['error.hint'] = options.hint
+      if (options.detail !== undefined) record['error.detail'] = options.detail
+      if (options.howToFix !== undefined)
+        record['error.how_to_fix'] = options.howToFix
+      if (options.category || options.target) {
+        addLabels(record, {
+          error_category: options.category,
+          error_target: options.target,
+        })
+      }
+      return options.level ? { level: options.level, downgraded: false } : kept
+    }
 
     if (error) {
       record['error.type'] = error.type
@@ -518,21 +550,31 @@ export class AppLogger implements LoggerService {
   }
 }
 
+function hasKeys(object: Record<string, unknown>): boolean {
+  for (const _ in object) return true
+  return false
+}
+
 function addLabels(
   record: Record<string, unknown>,
   values: Record<string, string | undefined>,
 ): void {
-  const entries = Object.entries(values).filter(([, value]) => value)
-  if (!entries.length) return
-  record.labels = {
-    ...(record.labels as Record<string, string> | undefined),
-    ...Object.fromEntries(entries),
+  let labels = record.labels as Record<string, string> | undefined
+  for (const key in values) {
+    const value = values[key]
+    if (!value) continue
+    labels ??= {}
+    labels[key] = value
   }
+  if (labels) record.labels = labels
 }
 
 /** A code equal to the class name (generic adapter) repeats error.type. */
 function dropTypeAsCode(record: Record<string, unknown>): void {
-  if (record['error.code'] === record['error.type']) {
+  if (
+    record['error.code'] !== undefined &&
+    record['error.code'] === record['error.type']
+  ) {
     record['error.code'] = undefined
   }
 }

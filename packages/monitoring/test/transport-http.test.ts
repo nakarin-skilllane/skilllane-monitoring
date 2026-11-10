@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'http'
 import type { AddressInfo } from 'net'
-import { gunzipSync } from 'zlib'
+import { gunzipSync, gzipSync } from 'zlib'
 import { resolveExportMode } from '../src/contract'
 import {
   afterAll,
@@ -134,6 +134,17 @@ describe('HttpTransport', () => {
     expect(received[0].headers['content-encoding']).toBe('gzip')
     expect(received[0].headers.authorization).toBeUndefined()
     expect(gunzipSync(received[0].body).toString()).toBe(body)
+  })
+
+  it('gzips at the fast level, as the Kafka transport does', async () => {
+    const body = JSON.stringify(
+      Array.from({ length: 300 }, (_, i) => ({
+        message: `Exam answer saved ${i}`,
+        examId: i * 7919,
+      })),
+    )
+    await new HttpTransport({ base }).publish('logs', message(body))
+    expect(received[0].body).toEqual(gzipSync(Buffer.from(body), { level: 1 }))
   })
 
   it('throws a retryable error when the engine is busy or down', async () => {

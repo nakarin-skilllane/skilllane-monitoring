@@ -2,10 +2,15 @@ import pino from 'pino'
 import type { LogLevel } from '../types'
 import { formatPretty, type PrettyOptions, type PrettyStack } from './pretty'
 
-export type LineWriter = (
-  record: Record<string, unknown>,
-  level: LogLevel,
-) => void
+export interface LineWriter {
+  (record: Record<string, unknown>, level: LogLevel): void
+  /**
+   * Writes a record the caller has already serialized as one JSON line (no
+   * newline). The JSON writer sets it, so the logger serializes a record once
+   * for stdout and the exporter together.
+   */
+  json?: (line: string) => void
+}
 
 /** JSON that never throws: circular references and BigInt become strings. */
 export function safeJson(record: Record<string, unknown>): string {
@@ -32,9 +37,11 @@ export function safeJson(record: Record<string, unknown>): string {
  */
 export function createJsonWriter(dest: number | string = 1): LineWriter {
   const destination = pino.destination({ dest, sync: true })
-  return (record) => {
-    destination.write(`${safeJson(record)}\n`)
+  const writer: LineWriter = (record) => writer.json!(safeJson(record))
+  writer.json = (line) => {
+    destination.write(`${line}\n`)
   }
+  return writer
 }
 
 export interface PrettyWriterOptions extends PrettyOptions {

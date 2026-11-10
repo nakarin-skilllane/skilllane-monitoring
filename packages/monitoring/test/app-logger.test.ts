@@ -6,6 +6,8 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { newScope, runInScope } from '../src/logger/context'
 import { createJsonWriter } from '../src/logger/writer'
+import { setRecordSink } from '../src/logger/sink'
+import { configureLogger } from '../src/logger'
 import { captureLogger, lastLine } from './helpers'
 
 afterEach(() => {
@@ -201,5 +203,32 @@ describe('JSON writer', () => {
         n: '7',
       },
     ])
+  })
+})
+
+describe('AppLogger and the record sink', () => {
+  it('hands the sink the JSON line stdout got, serialized once', () => {
+    const file = join(
+      mkdtempSync(join(tmpdir(), 'skilllane-monitoring-sink-')),
+      'app.log',
+    )
+    const got: unknown[][] = []
+    setRecordSink((...args) => got.push(args))
+    try {
+      const logger = configureLogger({
+        service: 'test-api',
+        level: 'debug',
+        writer: createJsonWriter(file),
+      })
+      logger.log('Exam saved', { examId: 7 }, 'ExamService')
+    } finally {
+      setRecordSink(undefined)
+    }
+    const line = readFileSync(file, 'utf8').trimEnd()
+    expect(got).toHaveLength(1)
+    const [record, level, json] = got[0]
+    expect(level).toBe('info')
+    expect(json).toBe(line)
+    expect(JSON.parse(line)).toMatchObject(record as object)
   })
 })

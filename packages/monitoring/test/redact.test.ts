@@ -103,3 +103,22 @@ describe('emails are not masked', () => {
     })
   })
 })
+
+describe('redactRecord on a stack trace', () => {
+  it('masks the message head and leaves the frame lines as they are', () => {
+    const frames = [
+      '    at UserService.login (/app/dist/src/auth/user.service.js:42:11)',
+      '    at run (/builds/secret=abc/app.js:3:9)',
+      '    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)',
+    ]
+    const record: Record<string, unknown> = {
+      'error.stack_trace': ['Error: login failed token=abc123', ...frames].join(
+        '\n',
+      ),
+    }
+    redactRecord(record)
+    expect(record['error.stack_trace']).toBe(
+      ['Error: login failed token=[REDACTED]', ...frames].join('\n'),
+    )
+  })
+})
