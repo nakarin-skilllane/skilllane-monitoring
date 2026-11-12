@@ -2,6 +2,7 @@ import { SpanKind, SpanStatusCode } from '@opentelemetry/api'
 import { describe, expect, it } from 'vitest'
 import { ErrorCode } from '../src/errors/error-codes'
 import { FailedStepSpanProcessor } from '../src/integrations/failed-step'
+import { runJob } from '../src/jobs/run-job'
 import { newScope, runInScope } from '../src/logger/context'
 import { formatPretty } from '../src/logger/pretty'
 import {
@@ -207,5 +208,104 @@ describe('a code logged without an error', () => {
     const { logger, lines } = captureLogger()
     logger.error('plain message')
     expect(lastLine(lines)['log.origin.function']).toBeUndefined()
+  })
+})
+
+describe('every line names the request or job it was written in', () => {
+  it('a line in a request gets its method, route and path, shown like the request line', async () => {
+    const { logger, lines } = captureLogger()
+    await runInScope(newScope(request), async () => {
+      logger.log('loading questions', 'QuestionService')
+    })
+    const line = lastLine(lines)
+    expect(line).toMatchObject({
+      'event.code': 'app.log',
+      'http.request.method': 'GET',
+      'http.route': '/question-bank/my',
+      'url.path': '/question-bank/my',
+    })
+    const [, what] = formatPretty(line).split('\n')
+    expect(what).toMatch(
+      /^ {4}method=GET path=\/question-bank\/my duration=\d+ms$/,
+    )
+  })
+
+  it('before the router matched: the path the request came in on', async () => {
+    const { logger, lines } = captureLogger()
+    await runInScope(
+      newScope({ method: 'POST', originalUrl: '/auth/login?next=/home' }),
+      async () => {
+        logger.log('checking credentials', 'AuthMiddleware')
+      },
+    )
+    const line = lastLine(lines)
+    expect(line['http.request.method']).toBe('POST')
+    expect(line['http.route']).toBeUndefined()
+    expect(line['url.path']).toBe('/auth/login')
+  })
+
+  it('a line about another call keeps its own http fields', async () => {
+    const { logger, lines } = captureLogger()
+    await runInScope(newScope(request), async () => {
+      logger.event({
+        event: 'app.log',
+        logger: 'PaymentClient',
+        message: 'calling the payment API',
+        fields: {
+          'http.request.method': 'POST',
+          'url.domain': 'pay.example.com',
+        },
+      })
+    })
+    const line = lastLine(lines)
+    expect(line['http.request.method']).toBe('POST')
+    expect(line['http.route']).toBeUndefined()
+    expect(line['url.path']).toBeUndefined()
+  })
+
+  it('a line in a job gets the job, shown like job.started', async () => {
+    const { logger, lines } = captureLogger()
+    await runJob(
+      {
+        kind: 'job',
+        source: 'bullmq',
+        field: 'job:mail:9',
+        queue: 'mail',
+        type: 'sendReceipt',
+        id: '9',
+        attempt: 1,
+        maxAttempts: 3,
+        logger: 'Queue:mail',
+      },
+      async () => {
+        logger.log('sending receipt', 'MailService')
+      },
+    )
+    const line = lines.find((l) => l.message === 'sending receipt') as Record<
+      string,
+      unknown
+    >
+    expect(line).toMatchObject({
+      'event.code': 'app.log',
+      'event.module': 'bullmq',
+      'job.queue': 'mail',
+      'job.type': 'sendReceipt',
+      'job.id': '9',
+      'job.attempt': 1,
+      'job.max_attempts': 3,
+    })
+    expect(line['http.route']).toBeUndefined()
+    const [, what] = formatPretty(line).split('\n')
+    expect(what).toMatch(
+      /^ {4}source=bullmq job=sendReceipt id=9 attempt=1\/3 duration=\d+ms$/,
+    )
+  })
+
+  it('a line outside any request or job names none', () => {
+    const { logger, lines } = captureLogger()
+    logger.log('cache warmed', 'CacheService')
+    const line = lastLine(lines)
+    expect(line['http.request.method']).toBeUndefined()
+    expect(line['job.queue']).toBeUndefined()
   })
 })

@@ -92,6 +92,7 @@ export async function runJob<T>(
 ): Promise<T> {
   const logger = getLogger()
   const scope = newScope()
+  scope.job = jobFields(meta)
   return runInScope(scope, () =>
     tracer.startActiveSpan(
       `${meta.queue} ${meta.type}`,

@@ -21,6 +21,7 @@ import {
   currentScope,
   ELAPSED_MS,
   defaultRequestUser,
+  type LogScope,
   type RequestUserResolver,
 } from './context'
 import { serviceIdentity } from '../otel/identity'
@@ -70,6 +71,15 @@ export interface EventInput {
   /** Values for dependency hint placeholders. */
   hintVars?: HintVars
 }
+
+/** A line with one of these is about a call of its own (an outbound request): it keeps them. */
+const OWN_CALL_FIELDS = [
+  'http.request.method',
+  'http.route',
+  'url.path',
+  'url.domain',
+  'http.response.status_code',
+] as const
 
 const DEFAULT_MAX_MESSAGE = 2_000
 const DEFAULT_MAX_STACK = 8_000
@@ -264,6 +274,13 @@ export class AppLogger implements LoggerService {
     if (this.hostName) record['host.name'] = this.hostName
     Object.assign(record, input.fields)
 
+    let scope: ReturnType<typeof currentScope>
+    try {
+      scope = currentScope()
+    } catch {
+      scope = undefined
+    }
+
     // A pattern's warn inside an HTTP request waits for the response status.
     let waitForStatus = false
     try {
@@ -273,18 +290,17 @@ export class AppLogger implements LoggerService {
     } catch {
       // keep the line without error details
     }
+    try {
+      this.applyScope(record, input.event, scope)
+    } catch {
+      // the request or job is optional
+    }
     // `log` knows its caller on every line; where an error was thrown wins.
     if (input.caller) {
       record['log.origin.function'] ??= input.caller.function
       record['log.origin.file.name'] ??= input.caller.file
     }
     record['log.level'] = level
-    let scope: ReturnType<typeof currentScope>
-    try {
-      scope = currentScope()
-    } catch {
-      scope = undefined
-    }
     const hold = waitForStatus && canHold(scope)
     // A held line may still become error, so its level is checked on release.
     if (!hold && !this.isLevelEnabled(level)) return
@@ -529,6 +545,38 @@ export class AppLogger implements LoggerService {
     record['http.request.method'] ??= req.method
     record['http.route'] ??= req.route?.path
     record['url.path'] ??= stripQuery(req.originalUrl ?? req.url ?? '')
+  }
+
+  /**
+   * Every line written in a request names it the way its http.request line
+   * does (method, route, path: the path alone before the router matched), and
+   * every line in a job the way job.started does (source, queue, type, id,
+   * attempt). A line with http fields of its own is about another call and
+   * keeps them; job.* lines already carry their job.
+   */
+  private applyScope(
+    record: Record<string, unknown>,
+    event: EventCode,
+    scope: LogScope | undefined,
+  ): void {
+    if (!scope || event === 'http.request') return
+    for (const key of OWN_CALL_FIELDS) if (record[key] !== undefined) return
+    const req = scope.req
+    if (req) {
+      record['http.request.method'] = req.method
+      record['http.route'] = req.route?.path
+      record['url.path'] =
+        stripQuery(req.originalUrl ?? req.url ?? '') || undefined
+      return
+    }
+    const job = scope.job
+    if (
+      !job ||
+      record['job.queue'] !== undefined ||
+      record['job.type'] !== undefined
+    )
+      return
+    for (const key in job) record[key] ??= job[key]
   }
 
   private devWarn(

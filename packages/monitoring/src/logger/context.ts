@@ -30,6 +30,8 @@ export interface LogScope {
    * when the response finishes.
    */
   held?: HeldLine[]
+  /** Jobs only: the job.* fields of job.started, named on every line of the job. */
+  job?: Record<string, unknown>
 }
 
 const storage = new AsyncLocalStorage<LogScope>()

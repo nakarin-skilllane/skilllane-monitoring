@@ -249,6 +249,11 @@ JSON with the same fields.
   where (`file target reason dlq affects retry port`), `duration` last. `path`
   is the route pattern; `duration` inside a request/job without one is the time
   since it started.
+- Every line written in a request names it (`method path`, the raw path before
+  the router matched; no `status`, which only the closing `http.request` line
+  knows), and every line in a job names the job (`source job id attempt`). A
+  line about another call (its own method, path or domain) keeps its own. The
+  same fields are in the JSON, so the engine has them on every line.
 - Then `error code:`, `error detail:` (`error.detail`), `how to fix:`
   (`error.how_to_fix`), `actual error:`, `stack:` (`LOG_STACK`), `user id:`,
   `trace id:` — only those with a value.
